@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { ChatWindow } from '@/components/ChatWindow';
 import { Sidebar } from '@/components/Sidebar';
 import { InputBar } from '@/components/InputBar';
-import { ParticleBackground, setParticleStreaming } from '@/components/ParticleBackground';
+import {
+  ParticleBackground,
+  setParticleStreaming,
+} from '@/components/ParticleBackground';
 import { storage } from '@/lib/storage';
 import { ChatConversation, ChatMessage } from '@/types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,45 +18,64 @@ import Link from 'next/link';
 
 export default function ChatPage() {
   const { data: session, update } = useSession();
+
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const [currentConversation, setCurrentConversation] = useState<ChatConversation | null>(null);
+  const [currentConversation, setCurrentConversation] =
+    useState<ChatConversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-  const handleSendMessageRef = useRef<((text: string) => Promise<void>) | null>(null);
 
-  // Sync username from sessionStorage into NextAuth session + set userKey
+  const router = useRouter();
+
+  const handleSendMessageRef = useRef<
+    ((text: string) => Promise<void>) | null
+  >(null);
+
+  // Sync username from sessionStorage into NextAuth session
   useEffect(() => {
     if (!session) return;
+
     const savedName = sessionStorage.getItem('ismi_username');
+
     if (savedName) {
       sessionStorage.removeItem('ismi_username');
       update({ name: savedName });
     }
+
     const userId = (session.user as { id?: string })?.id;
+
     if (userId) {
       storage.setUserKey(userId);
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
   }, [session, update]);
 
+  // Create a new chat
   const createNewChat = useCallback(() => {
     const newConvo = storage.createConversation();
+
     storage.setCurrentChatId(newConvo.id);
+
     setCurrentConversation(newConvo);
-    // Don't add to conversations list until it has messages
   }, []);
 
+  // Load conversations
   const loadConversations = useCallback(async () => {
     const convos = await storage.getConversations();
-    // Filter out empty conversations (no messages) — they'll be shown in chat area only
-    const nonEmptyConvos = convos.filter(c => c.messages.length > 0);
+
+    const nonEmptyConvos = convos.filter(
+      (conversation) => conversation.messages.length > 0
+    );
+
     setConversations(nonEmptyConvos);
 
-    // Load current conversation if exists
     const currentId = storage.getCurrentChatId();
+
     if (currentId) {
-      const current = convos.find(c => c.id === currentId);
+      const current = convos.find(
+        (conversation) => conversation.id === currentId
+      );
+
       if (current) {
         setCurrentConversation(current);
       } else {
@@ -64,7 +86,7 @@ export default function ChatPage() {
     }
   }, [createNewChat]);
 
-  // Load saved conversations once session is available
+  // Load saved conversations after authentication
   useEffect(() => {
     if (session) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -72,213 +94,385 @@ export default function ChatPage() {
     }
   }, [session, loadConversations]);
 
-  // Tell particle system when streaming starts/stops so it can throttle
+  // Tell particle system when streaming starts/stops
   useEffect(() => {
     setParticleStreaming(isLoading);
   }, [isLoading]);
 
-  // Handle "suggested prompt" clicks to behave like typing + send
+  // Suggested prompt handler
   useEffect(() => {
-    const handler = (e: CustomEvent<{ text: string }>) => {
-      const text = e?.detail?.text;
+    const handler = (event: CustomEvent<{ text: string }>) => {
+      const text = event?.detail?.text;
+
       if (typeof text === 'string' && text.trim()) {
         handleSendMessageRef.current?.(text);
       }
     };
 
-    window.addEventListener('ismi_send_message', handler as EventListener);
-    return () => window.removeEventListener('ismi_send_message', handler as EventListener);
+    window.addEventListener(
+      'ismi_send_message',
+      handler as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        'ismi_send_message',
+        handler as EventListener
+      );
+    };
   }, [currentConversation]);
 
+  // Select conversation
   const handleSelectConversation = async (id: string) => {
     const convo = await storage.getConversation(id);
+
     if (convo) {
       setCurrentConversation(convo);
       storage.setCurrentChatId(id);
     }
   };
 
+  // Delete conversation
   const handleDeleteConversation = async (id: string) => {
     await storage.deleteConversation(id);
-    setConversations(prev => prev.filter(c => c.id !== id));
 
-    // If we deleted the current conversation, switch to another one instead of creating a new one
+    setConversations((prev) =>
+      prev.filter((conversation) => conversation.id !== id)
+    );
+
     if (currentConversation?.id === id) {
-      const remaining = conversations.filter(c => c.id !== id);
+      const remaining = conversations.filter(
+        (conversation) => conversation.id !== id
+      );
+
       if (remaining.length > 0) {
         const next = remaining[0];
+
         setCurrentConversation(next);
         storage.setCurrentChatId(next.id);
       } else {
-        // No conversations left — create exactly one new one
         createNewChat();
       }
     }
   };
 
-  const handleRenameConversation = useCallback(async (id: string, newTitle: string) => {
-    await storage.renameConversation(id, newTitle);
-    setConversations(prev => prev.map(c => (c.id === id ? { ...c, title: newTitle } : c)));
-    if (currentConversation?.id === id) {
-      setCurrentConversation(prev => (prev ? { ...prev, title: newTitle } : null));
-    }
-  }, [currentConversation]);
+  // Rename conversation
+  const handleRenameConversation = useCallback(
+    async (id: string, newTitle: string) => {
+      await storage.renameConversation(id, newTitle);
 
-  const handleSendMessage = useCallback(async (text: string) => {
-    if (!currentConversation) return;
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === id
+            ? { ...conversation, title: newTitle }
+            : conversation
+        )
+      );
 
-    setError(null);
-    const thisConvoId = currentConversation.id;
-
-    const userMessage: ChatMessage = {
-      id: storage.generateId(),
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Add user message IMMEDIATELY
-    const updatedConvo = {
-      ...currentConversation,
-      messages: [...currentConversation.messages, userMessage],
-    };
-    setCurrentConversation(updatedConvo);
-
-    // Save to storage immediately
-    await storage.saveConversation(updatedConvo);
-
-    // Add to sidebar only if it's the first message (converting from empty to non-empty)
-    if (currentConversation.messages.length === 0) {
-      setConversations(prev => {
-        const existing = prev.find(c => c.id === thisConvoId);
-        if (existing) {
-          return prev.map(c => (c.id === thisConvoId ? updatedConvo : c));
-        }
-        return [updatedConvo, ...prev];
-      });
-    } else {
-      // Update existing conversation in sidebar
-      setConversations(prev => prev.map(c => (c.id === thisConvoId ? updatedConvo : c)));
-    }
-
-    // Auto-title first message
-    if (currentConversation.messages.length === 0) {
-      const title = text.slice(0, 50) + (text.length > 50 ? '...' : '');
-      await handleRenameConversation(thisConvoId, title);
-    }
-
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...currentConversation.messages, userMessage].map(m => ({
-            role: m.role === 'user' ? 'user' : 'model',
-            content: m.content,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        // Gate: redirect to Google login on auth failure
-        if (response.status === 401) {
-          router.push('/login');
-          return;
-        }
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API error: ${response.status}`);
+      if (currentConversation?.id === id) {
+        setCurrentConversation((prev) =>
+          prev ? { ...prev, title: newTitle } : null
+        );
       }
+    },
+    [currentConversation]
+  );
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let assistantContent = '';
+  // Send message
+  const handleSendMessage = useCallback(
+    async (text: string) => {
+      if (!currentConversation) return;
 
-      const assistantMessage: ChatMessage = {
+      const trimmedText = text.trim();
+
+      if (!trimmedText) return;
+
+      setError(null);
+
+      const thisConvoId = currentConversation.id;
+
+      // Create user message
+      const userMessage: ChatMessage = {
         id: storage.generateId(),
-        role: 'assistant',
-        content: '',
+        role: 'user',
+        content: trimmedText,
         timestamp: new Date().toISOString(),
       };
 
-      if (reader) {
+      // Add user message immediately
+      const updatedConvo: ChatConversation = {
+        ...currentConversation,
+        messages: [
+          ...currentConversation.messages,
+          userMessage,
+        ],
+      };
+
+      setCurrentConversation(updatedConvo);
+
+      // Save immediately
+      await storage.saveConversation(updatedConvo);
+
+      // Add to sidebar if first message
+      if (currentConversation.messages.length === 0) {
+        setConversations((prev) => {
+          const existing = prev.find(
+            (conversation) => conversation.id === thisConvoId
+          );
+
+          if (existing) {
+            return prev.map((conversation) =>
+              conversation.id === thisConvoId
+                ? updatedConvo
+                : conversation
+            );
+          }
+
+          return [updatedConvo, ...prev];
+        });
+      } else {
+        // Update existing conversation
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === thisConvoId
+              ? updatedConvo
+              : conversation
+          )
+        );
+      }
+
+      // Auto-title first message
+      if (currentConversation.messages.length === 0) {
+        const title =
+          trimmedText.slice(0, 50) +
+          (trimmedText.length > 50 ? '...' : '');
+
+        await handleRenameConversation(thisConvoId, title);
+      }
+
+      setIsLoading(true);
+
+      try {
+        /*
+         * IMPORTANT FIX:
+         *
+         * Backend accepts:
+         * user | assistant | system
+         *
+         * Previously we were converting assistant -> model.
+         * That caused:
+         *
+         * "Invalid option expected one of user, assistant, system"
+         *
+         * Now we send the role exactly as the backend expects.
+         */
+        const apiMessages = [
+          ...currentConversation.messages,
+          userMessage,
+        ].map((message) => {
+          // Stored chat history may contain legacy/invalid roles.
+          // Backend accepts only: "user" | "assistant" | "system".
+          const rawRole = (message as { role?: unknown }).role;
+
+          const role: "user" | "assistant" | "system" =
+            rawRole === "user" ||
+            rawRole === "assistant" ||
+            rawRole === "system"
+              ? rawRole
+              : "assistant";
+
+          return {
+            role,
+            content: message.content,
+          };
+        });
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: apiMessages,
+          }),
+        });
+
+        // Authentication failure
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.push('/login');
+            return;
+          }
+
+          let errorMessage = `API error: ${response.status}`;
+
+          try {
+            const errorData = await response.json();
+
+            if (errorData?.error) {
+              errorMessage = errorData.error;
+            }
+          } catch {
+            // Ignore JSON parsing error
+          }
+
+          throw new Error(errorMessage);
+        }
+
+        const reader = response.body?.getReader();
+
+        if (!reader) {
+          throw new Error('Failed to read AI response');
+        }
+
+        const decoder = new TextDecoder();
+
+        let assistantContent = '';
+
+        // Temporary assistant message
+        const assistantMessage: ChatMessage = {
+          id: storage.generateId(),
+          role: 'assistant',
+          content: '',
+          timestamp: new Date().toISOString(),
+        };
+
         while (true) {
           const { done, value } = await reader.read();
+
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+          const chunk = decoder.decode(value, {
+            stream: true,
+          });
+
+          const lines = chunk
+            .split('\n')
+            .filter((line) => line.startsWith('data: '));
 
           for (const line of lines) {
             const data = line.replace('data: ', '');
-            if (data === '[DONE]') break;
+
+            if (data === '[DONE]') {
+              continue;
+            }
 
             try {
               const parsed = JSON.parse(data);
+
               if (parsed.error) {
                 throw new Error(parsed.error);
               }
+
               if (parsed.text) {
                 assistantContent += parsed.text;
+
                 assistantMessage.content = assistantContent;
 
-                // Only update UI if we're still on the same conversation
-                setCurrentConversation(prev => {
+                // Update UI while streaming
+                setCurrentConversation((prev) => {
                   if (!prev) return prev;
-                  // If user switched conversations, don't update this one
-                  if (prev.id !== thisConvoId) return prev;
+
+                  // Don't update if user switched conversation
+                  if (prev.id !== thisConvoId) {
+                    return prev;
+                  }
+
                   const messages = [...prev.messages];
-                  const lastMsg = messages[messages.length - 1];
-                  if (lastMsg && lastMsg.role === 'assistant') {
-                    messages[messages.length - 1] = assistantMessage;
+
+                  const lastMessage =
+                    messages[messages.length - 1];
+
+                  if (
+                    lastMessage &&
+                    lastMessage.role === 'assistant'
+                  ) {
+                    messages[messages.length - 1] =
+                      assistantMessage;
                   } else {
                     messages.push(assistantMessage);
                   }
-                  return { ...prev, messages };
+
+                  return {
+                    ...prev,
+                    messages,
+                  };
                 });
               }
-            } catch (e) {
-              console.error('[Chat] Parse error:', e);
+            } catch (parseError) {
+              console.error(
+                '[Chat] Parse error:',
+                parseError
+              );
             }
           }
         }
-      }
 
-      // Save final message
-      if (assistantContent) {
-        const finalConvo = await storage.getConversation(thisConvoId);
-        if (finalConvo) {
-          finalConvo.messages.push(assistantMessage);
-          await storage.saveConversation(finalConvo);
-          // Only update UI state if we're still on the same conversation
-          setCurrentConversation(prev => {
-            if (prev?.id !== thisConvoId) return prev;
-            return finalConvo;
-          });
+        // Save final assistant response
+        if (assistantContent) {
+          const finalConvo =
+            await storage.getConversation(thisConvoId);
+
+          if (finalConvo) {
+            finalConvo.messages.push(assistantMessage);
+
+            await storage.saveConversation(finalConvo);
+
+            setCurrentConversation((prev) => {
+              if (prev?.id !== thisConvoId) {
+                return prev;
+              }
+
+              return finalConvo;
+            });
+
+            // Update sidebar
+            setConversations((prev) =>
+              prev.map((conversation) =>
+                conversation.id === thisConvoId
+                  ? finalConvo
+                  : conversation
+              )
+            );
+          }
         }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('[Chat] Request failed:', error);
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to get AI response'
+        );
+
+        setIsLoading(false);
       }
+    },
+    [
+      currentConversation,
+      handleRenameConversation,
+      router,
+    ]
+  );
 
-      setIsLoading(false);
-    } catch (error) {
-      setError((error as Error)?.message || 'Failed to get AI response');
-      setIsLoading(false);
-    }
-  }, [currentConversation, handleRenameConversation, router]);
-
-  // Keep handleSendMessageRef in sync with the latest handleSendMessage
+  // Keep ref updated
   useEffect(() => {
     handleSendMessageRef.current = handleSendMessage;
   }, [handleSendMessage]);
 
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-[#0f172a]">
-      {/* Animated macro DNA helix background behind the chat */}
+      {/* Background */}
       <ParticleBackground variant="dna" />
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between p-4 border-b border-blue-200/15 bg-blue-500/5">
-        <Link href="/" className="text-xl font-bold text-white drop-shadow">
+        <Link
+          href="/"
+          className="text-xl font-bold text-white drop-shadow"
+        >
           ismi.ai
         </Link>
 
@@ -299,7 +493,9 @@ export default function ChatPage() {
       <div className="relative z-10 flex-1 flex overflow-hidden">
         <Sidebar
           conversations={conversations}
-          currentConversationId={currentConversation?.id || null}
+          currentConversationId={
+            currentConversation?.id || null
+          }
           onSelectConversation={handleSelectConversation}
           onNewChat={createNewChat}
           onDeleteConversation={handleDeleteConversation}
@@ -312,13 +508,22 @@ export default function ChatPage() {
             isLoading={isLoading}
           />
 
-          {/* Error message */}
+          {/* Error */}
           <AnimatePresence>
             {error && (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
+                initial={{
+                  opacity: 0,
+                  y: 20,
+                }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                }}
+                exit={{
+                  opacity: 0,
+                  y: 20,
+                }}
                 className="px-4 py-2 mx-4 mb-2 bg-red-500/15 border border-red-400/30 rounded-xl text-[#fecaca] text-sm backdrop-blur-[2px]"
               >
                 {error}
@@ -326,6 +531,7 @@ export default function ChatPage() {
             )}
           </AnimatePresence>
 
+          {/* Input */}
           <div className="p-4 border-t border-blue-200/15 bg-blue-500/5">
             <InputBar
               onSendMessage={handleSendMessage}
