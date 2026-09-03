@@ -1,20 +1,117 @@
+'use client';
+
 import { ChatMessage, ChatConversation, StorageInterface } from '@/types/chat';
 
 /**
  * Storage utility for chat history
- * Currently uses localStorage but structured for easy migration to a real database
- * (Supabase, Firebase, etc.) without rewriting the application code
+ *
+ * NOTE:
+ * - We store chat history in browser `localStorage` (no server DB yet).
+ * - To meet your requirement, we scope history by (userKey + deviceId).
+ *   - userKey: set after Google+OTP verification (defaults to 'anon')
+ *   - deviceId: stable per browser/device
+ *
+ * Some environments block localStorage (privacy mode / hardened browsers).
+ * We guard every localStorage access so the UI never gets stuck/crashes.
  */
 
 class LocalStorageService implements StorageInterface {
-  private readonly CONVERSATIONS_KEY = 'ismi_conversations';
-  private readonly CURRENT_CHAT_KEY = 'ismi_current_chat';
+  // Per-device identity (stable across visits on the same browser/device)
+  private readonly DEVICE_ID_KEY = 'ismi_device_id';
+  // Per-user identity (set after auth). Defaults to 'anon'.
+  private readonly USER_KEY_KEY = 'ismi_user_key';
+
+  private canUseStorage(): boolean {
+    try {
+      return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+    } catch {
+      return false;
+    }
+  }
+
+  private safeGetItem(key: string): string | null {
+    try {
+      if (!this.canUseStorage()) return null;
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  private safeSetItem(key: string, value: string): void {
+    try {
+      if (!this.canUseStorage()) return;
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  }
+
+  private safeRemoveItem(key: string): void {
+    try {
+      if (!this.canUseStorage()) return;
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+
+  private getScopedKeys(): { conversationsKey: string; currentChatKey: string } | null {
+    try {
+      if (!this.canUseStorage()) return null;
+
+      const deviceId = this.getOrCreateDeviceId();
+      const userKey = this.getUserKey();
+      if (!deviceId || !userKey) return null;
+
+      return {
+        conversationsKey: `ismi_conversations:${userKey}:${deviceId}`,
+        currentChatKey: `ismi_current_chat:${userKey}:${deviceId}`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private getOrCreateDeviceId(): string | null {
+    try {
+      const existing = this.safeGetItem(this.DEVICE_ID_KEY);
+      if (existing && existing.trim()) return existing;
+
+      const created = this.generateId();
+      this.safeSetItem(this.DEVICE_ID_KEY, created);
+      return created;
+    } catch {
+      return null;
+    }
+  }
+
+  private getUserKey(): string | null {
+    try {
+      const existing = this.safeGetItem(this.USER_KEY_KEY);
+      if (existing && existing.trim()) return existing;
+      return 'anon';
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Call this after user completes Google+OTP verification.
+   * Example userKey: normalized email or NextAuth user sub.
+   */
+  setUserKey(userKey: string): void {
+    this.safeSetItem(this.USER_KEY_KEY, (userKey || '').trim());
+  }
 
   // Get all conversations
   async getConversations(): Promise<ChatConversation[]> {
+    const keys = this.getScopedKeys();
+    if (!keys) return [];
+
     try {
-      const data = localStorage.getItem(this.CONVERSATIONS_KEY);
-      return data ? JSON.parse(data) : [];
+      const data = this.safeGetItem(keys.conversationsKey);
+      return data ? (JSON.parse(data) as ChatConversation[]) : [];
     } catch {
       return [];
     }
@@ -28,32 +125,53 @@ class LocalStorageService implements StorageInterface {
 
   // Save a conversation
   async saveConversation(conversation: ChatConversation): Promise<void> {
-    const conversations = await this.getConversations();
-    const existingIndex = conversations.findIndex(c => c.id === conversation.id);
+    const keys = this.getScopedKeys();
+    if (!keys) return;
 
-    if (existingIndex >= 0) {
-      conversations[existingIndex] = conversation;
-    } else {
-      conversations.unshift(conversation);
+    try {
+      const conversations = await this.getConversations();
+      const existingIndex = conversations.findIndex(c => c.id === conversation.id);
+
+      if (existingIndex >= 0) {
+        conversations[existingIndex] = conversation;
+      } else {
+        conversations.unshift(conversation);
+      }
+
+      this.safeSetItem(keys.conversationsKey, JSON.stringify(conversations));
+    } catch {
+      // ignore
     }
-
-    localStorage.setItem(this.CONVERSATIONS_KEY, JSON.stringify(conversations));
   }
 
   // Delete a conversation
   async deleteConversation(id: string): Promise<void> {
-    const conversations = await this.getConversations();
-    const filtered = conversations.filter(c => c.id !== id);
-    localStorage.setItem(this.CONVERSATIONS_KEY, JSON.stringify(filtered));
+    const keys = this.getScopedKeys();
+    if (!keys) return;
+
+    try {
+      const conversations = await this.getConversations();
+      const filtered = conversations.filter(c => c.id !== id);
+      this.safeSetItem(keys.conversationsKey, JSON.stringify(filtered));
+    } catch {
+      // ignore
+    }
   }
 
   // Rename a conversation
   async renameConversation(id: string, title: string): Promise<void> {
-    const conversations = await this.getConversations();
-    const conversation = conversations.find(c => c.id === id);
-    if (conversation) {
-      conversation.title = title;
-      localStorage.setItem(this.CONVERSATIONS_KEY, JSON.stringify(conversations));
+    const keys = this.getScopedKeys();
+    if (!keys) return;
+
+    try {
+      const conversations = await this.getConversations();
+      const conversation = conversations.find(c => c.id === id);
+      if (conversation) {
+        conversation.title = title;
+        this.safeSetItem(keys.conversationsKey, JSON.stringify(conversations));
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -69,17 +187,23 @@ class LocalStorageService implements StorageInterface {
 
   // Get current active chat ID
   getCurrentChatId(): string | null {
-    return localStorage.getItem(this.CURRENT_CHAT_KEY);
+    const keys = this.getScopedKeys();
+    if (!keys) return null;
+    return this.safeGetItem(keys.currentChatKey);
   }
 
   // Set current active chat ID
   setCurrentChatId(id: string): void {
-    localStorage.setItem(this.CURRENT_CHAT_KEY, id);
+    const keys = this.getScopedKeys();
+    if (!keys) return;
+    this.safeSetItem(keys.currentChatKey, id);
   }
 
   // Clear current chat
   clearCurrentChat(): void {
-    localStorage.removeItem(this.CURRENT_CHAT_KEY);
+    const keys = this.getScopedKeys();
+    if (!keys) return;
+    this.safeRemoveItem(keys.currentChatKey);
   }
 
   // Generate unique ID

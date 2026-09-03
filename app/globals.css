@@ -1,18 +1,43 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light only;
+  /* Flat Claude.ai-like palette (no gradients, no glassmorphism) */
   --background: #fafbff;
   --foreground: #1a1a2e;
+
   --primary: #7c3aed;
+  --primary-hover: #6d28d9;
   --primary-light: #a78bfa;
-  --accent-blue: #60a5fa;
-  --accent-lavender: #c4b5fd;
-  --accent-mint: #6ee7b7;
-  --accent-pink: #f9a8d4;
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.3);
-  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.08);
-  --shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.12);
+
+  --surface: #ffffff;
+  --surface-2: #f3f4ff;
+  --border: #e5e7eb;
+
+  --text-muted: #6b7280;
+  --text-muted-2: #4b5563;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 3px 10px rgba(0, 0, 0, 0.10);
+}
+
+.dark {
+  --background: #0f172a;
+  --foreground: #e5e5f0;
+
+  --primary: #a78bfa;
+  --primary-hover: #8b5cf6;
+  --primary-light: #c4b5fd;
+
+  --surface: #111827;
+  --surface-2: #1e293b;
+  --border: #334155;
+
+  --text-muted: #94a3b8;
+  --text-muted-2: #cbd5e1;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-hover: 0 3px 10px rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -27,26 +52,24 @@ body {
 }
 
 body {
-  background: linear-gradient(135deg, #fafbff 0%, #f0f4ff 50%, #faf5ff 100%);
+  background: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Glassmorphism utilities */
+/* Flat surface utilities (no blur, no transparency) */
 .glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-soft);
 }
 
 .glass-hover:hover {
   box-shadow: var(--shadow-hover);
-  transform: translateY(-2px);
-  transition: all 0.3s ease;
+  transform: translateY(-1px);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* Smooth scrollbar */
@@ -60,12 +83,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(124, 58, 237, 0.2);
+  background: rgba(124, 58, 237, 0.25);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.35);
 }
 
 /* Animation utilities */
@@ -81,7 +104,8 @@ body {
 }
 
 @keyframes pulse-soft {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
@@ -90,12 +114,29 @@ body {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
   }
   50% {
     transform: translateY(-10px);
   }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.8s ease-out infinite;
 }
 
 .animate-fade-in {
@@ -110,44 +151,132 @@ body {
   animation: float 6s ease-in-out infinite;
 }
 
-/* Gradient text */
+/* Gradient text -> flat accent color */
 .gradient-text {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--accent-blue) 50%, var(--accent-mint) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  background: none;
+  -webkit-text-fill-color: unset;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--primary);
 }
 
-/* Button styles */
+/* Button styles (no gradients) */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  background: var(--primary);
   color: white;
   padding: 12px 24px;
   border-radius: 12px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   border: none;
   cursor: pointer;
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+  transform: translateY(-1px);
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-hover);
 }
 
 .btn-secondary {
-  background: var(--glass-bg);
-  backdrop-filter: blur(10px);
+  background: var(--surface);
   color: var(--foreground);
   padding: 12px 24px;
   border-radius: 12px;
   font-weight: 600;
-  transition: all 0.3s ease;
-  border: 1px solid var(--glass-border);
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  border: 1px solid var(--border);
   cursor: pointer;
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-2px);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+}
+
+/* ===== Animated flowing glow border (chat input + message bubbles) ===== */
+/* A colored line that loops around the border with a soft glow. */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes spin-angle {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+.glow-border {
+  position: relative;
+}
+
+/* Pseudo-element renders only the border ring (content area masked out),
+   so the element's own glass background still shows through. */
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 0%,
+    #a78bfa 10%,
+    #60a5fa 22%,
+    #7c3aed 34%,
+    transparent 48%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: spin-angle 3.5s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(124, 58, 237, 0.55));
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Slightly brighter version for the input bar so it stands out. */
+.glow-border-strong::before {
+  padding: 2px;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.7));
+  animation-duration: 2.8s;
+}
+
+/* ===== Mouse-following multi-color border (chat input only) ===== */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.glow-border-mouse {
+  position: relative;
+}
+
+.glow-border-mouse::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--border-angle),
+    #3b82f6 0deg,
+    #22c55e 90deg,
+    #eab308 180deg,
+    #ef4444 270deg,
+    #3b82f6 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 10px rgba(124, 58, 237, 0.5));
+  pointer-events: none;
+  z-index: 1;
+  transition: --border-angle 0.05s linear;
 }

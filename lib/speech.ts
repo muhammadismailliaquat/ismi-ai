@@ -2,6 +2,58 @@
 
 import { useRef, useEffect, useCallback } from 'react';
 
+// Type declarations for Web Speech API
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionInterface extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionInterface;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 interface UseSpeechRecognitionProps {
   onResult?: (transcript: string) => void;
   onError?: (error: string) => void;
@@ -17,19 +69,19 @@ export function useSpeechRecognition({
   continuous = false,
   language = 'en-US',
 }: UseSpeechRecognitionProps = {}) {
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInterface | null>(null);
   const isListeningRef = useRef(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionAPI) {
+        recognitionRef.current = new SpeechRecognitionAPI();
         recognitionRef.current.continuous = continuous;
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = language;
 
-        recognitionRef.current.onresult = (event) => {
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           const results = Array.from(event.results);
           const transcript = results
             .map(result => result[0].transcript)
@@ -40,7 +92,7 @@ export function useSpeechRecognition({
           }
         };
 
-        recognitionRef.current.onerror = (event) => {
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           onError?.(event.error);
           isListeningRef.current = false;
         };
@@ -78,7 +130,7 @@ export function useSpeechRecognition({
   }, []);
 
   const isSupported = typeof window !== 'undefined' &&
-    (window.SpeechRecognition || window.webkitSpeechRecognition);
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   return {
     startListening,

@@ -1,0 +1,615 @@
+<title>AI Provider Fallback Chain</title>
+<style>
+:root {
+  --color-primary: #7c3aed;
+  --color-primary-light: #a78bfa;
+  --color-primary-dark: #6d28d9;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-text: #1f2937;
+  --color-text-light: #6b7280;
+  --color-bg: #ffffff;
+  --color-surface: #f9fafb;
+  --color-border: #e5e7eb;
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-text: #f9fafb;
+    --color-text-light: #d1d5db;
+    --color-bg: #111827;
+    --color-surface: #1f2937;
+    --color-border: #374151;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-text: #f9fafb;
+  --color-text-light: #d1d5db;
+  --color-bg: #111827;
+  --color-surface: #1f2937;
+  --color-border: #374151;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-display);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-bg);
+  padding: var(--spacing-lg);
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: var(--spacing-sm);
+}
+
+h1 {
+  font-size: 2.5rem;
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+h2 {
+  font-size: 1.75rem;
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: var(--spacing-xs);
+  margin-top: var(--spacing-xl);
+  margin-bottom: var(--spacing-md);
+}
+
+h3 {
+  font-size: 1.25rem;
+  color: var(--color-text);
+  margin-top: var(--spacing-lg);
+}
+
+p {
+  margin-bottom: var(--spacing-sm);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.container {
+  display: grid;
+  gap: var(--spacing-xl);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.code-block {
+  font-family: var(--font-mono);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  overflow-x: auto;
+  margin: var(--spacing-md) 0;
+  font-size: 0.9rem;
+}
+
+.log-line {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin-bottom: 2px;
+}
+
+.log-info {
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid var(--color-primary);
+}
+
+.log-success {
+  background: rgba(16, 185, 129, 0.1);
+  border-left: 3px solid var(--color-success);
+}
+
+.log-error {
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--color-error);
+}
+
+.log-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid var(--color-warning);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.badge-primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.badge-success {
+  background: var(--color-success);
+  color: white;
+}
+
+.badge-warning {
+  background: var(--color-warning);
+  color: white;
+}
+
+.grid {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+@media (min-width: 768px) {
+  .grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.provider-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+}
+
+.gemini-icon { background: #7c3aed; }
+.groq-icon { background: #a78bfa; }
+.openrouter-icon { background: #c4b5fd; }
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-active { background: var(--color-success); }
+.status-inactive { background: var(--color-error); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacing-md) 0;
+}
+
+th, td {
+  padding: var(--spacing-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  font-weight: 600;
+  background: var(--color-surface);
+}
+
+.flow-diagram {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin: var(--spacing-xl) 0;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.flow-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+  font-size: 1.25rem;
+}
+
+.flow-arrow {
+  font-size: 1.5rem;
+  color: var(--color-text-light);
+}
+
+.test-scenario {
+  margin-bottom: var(--spacing-lg);
+}
+
+.test-btn {
+  display: inline-block;
+  background: var(--color-primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.test-btn:hover {
+  background: var(--color-primary-dark);
+}
+
+.console-output {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: var(--spacing-sm);
+}
+</style>
+<div class="container">
+  <header>
+    <h1>AI Provider Fallback Chain</h1>
+    <p>Resilient AI chatbot implementation with automatic provider switching</p>
+    <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-md);">
+      <span class="badge badge-success">✅ Implemented</span>
+      <span class="badge badge-primary">TypeScript</span>
+      <span class="badge badge-warning">Next.js</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Overview</h2>
+    <p>This implementation adds a fallback chain to the Ismi.ai chatbot, ensuring users always get responses even when individual AI providers hit rate limits or experience outages. The system automatically tries providers in order until one succeeds.</p>
+
+    <div class="flow-diagram">
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #7c3aed;">1</div>
+        <div style="font-weight: 500; margin-top: var(--spacing-xs);">Gemini</div>
+        <div style="font-size: 0.875rem; color: var(--color-text-light);">Primary</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #a78bfa;">2</div>
+        <div style="font-weight: 500; margin-top: var(--spacing-xs);">Groq</div>
+        <div style="font-size: 0.875rem; color: var(--color-text-light);">Fallback</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #c4b5fd;">3</div>
+        <div style="font-weight: 500; margin-top: var(--spacing-xs);">OpenRouter</div>
+        <div style="font-size: 0.875rem; color: var(--color-text-light);">Last Resort</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Provider Details</h2>
+    <div class="grid grid-2">
+      <div class="provider-card">
+        <div class="provider-header">
+          <div class="provider-icon gemini-icon">G</div>
+          <div>
+            <h3 style="margin: 0;">Gemini</h3>
+            <div class="status-indicator">
+              <span class="status-dot status-active"></span>
+              <span>Primary Provider</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>SDK:</strong> @google/generative-ai</p>
+        <p><strong>Model:</strong> gemini-pro</p>
+        <p><strong>Env Var:</strong> GEMINI_API_KEY</p>
+        <div class="code-block">
+// Error types that trigger fallback:<br>
+- Rate limit exceeded<br>
+- Quota exceeded<br>
+- Network errors
+        </div>
+      </div>
+
+      <div class="provider-card">
+        <div class="provider-header">
+          <div class="provider-icon groq-icon">Q</div>
+          <div>
+            <h3 style="margin: 0;">Groq</h3>
+            <div class="status-indicator">
+              <span class="status-dot status-active"></span>
+              <span>Secondary Provider</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>API:</strong> OpenAI-compatible</p>
+        <p><strong>Model:</strong> llama-3.3-70b-versatile</p>
+        <p><strong>Env Var:</strong> GROQ_API_KEY</p>
+        <div class="code-block">
+// HTTP errors that trigger fallback:<br>
+- 429 Rate limit<br>
+- 402 Payment required<br>
+- 503 Service unavailable
+        </div>
+      </div>
+
+      <div class="provider-card">
+        <div class="provider-header">
+          <div class="provider-icon openrouter-icon">O</div>
+          <div>
+            <h3 style="margin: 0;">OpenRouter</h3>
+            <div class="status-indicator">
+              <span class="status-dot status-active"></span>
+              <span>Tertiary Provider</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>API:</strong> OpenAI-compatible</p>
+        <p><strong>Model:</strong> llama-3.1-8b-instruct:free</p>
+        <p><strong>Env Var:</strong> OPENROUTER_API_KEY</p>
+        <div class="code-block">
+// Additional headers:<br>
+HTTP-Referer: http://localhost:3000<br>
+Authorization: Bearer {key}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Console Log Examples</h2>
+    <p>Detailed logging helps you monitor which provider is being used:</p>
+
+    <div class="test-scenario">
+      <h3>Normal Operation (Gemini Success)</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[API] Chat endpoint called</div>
+        <div class="log-line log-info">[API] Received request with 3 messages</div>
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-success">[AI] Responded via: Gemini</div>
+        <div class="log-line log-info">[API] Streaming complete via Gemini, total length: 245</div>
+      </div>
+    </div>
+
+    <div class="test-scenario">
+      <h3>Fallback Scenario (Gemini → Groq)</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[API] Chat endpoint called</div>
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-error">[AI] Gemini failed: Rate limit exceeded</div>
+        <div class="log-line log-warning">[AI] Falling back to next provider...</div>
+        <div class="log-line log-info">[AI] Trying: Groq</div>
+        <div class="log-line log-success">[AI] Responded via: Groq</div>
+        <div class="log-line log-info">[API] Streaming complete via Groq, total length: 189</div>
+      </div>
+    </div>
+
+    <div class="test-scenario">
+      <h3>Complete Fallback (All Providers)</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-error">[AI] Gemini failed: Quota exceeded</div>
+        <div class="log-line log-warning">[AI] Falling back to next provider...</div>
+        <div class="log-line log-info">[AI] Trying: Groq</div>
+        <div class="log-line log-error">[AI] Groq failed: Invalid API key</div>
+        <div class="log-line log-warning">[AI] Falling back to next provider...</div>
+        <div class="log-line log-info">[AI] Trying: OpenRouter</div>
+        <div class="log-line log-success">[AI] Responded via: OpenRouter</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Testing Instructions</h2>
+
+    <div class="grid grid-2">
+      <div>
+        <h3>Manual Testing</h3>
+        <ol style="margin-left: var(--spacing-md); margin-bottom: var(--spacing-md);">
+          <li>Start dev server: <code>npm run dev</code></li>
+          <li>Open browser to chat interface</li>
+          <li>Send a message and check console</li>
+          <li>Look for <code>[AI] Responded via:</code> logs</li>
+        </ol>
+
+        <h3>Test Scenarios</h3>
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-xs);">
+          <button class="test-btn" onclick="simulateTest('normal')">Test Normal Operation</button>
+          <button class="test-btn" onclick="simulateTest('fallback')">Test Fallback Chain</button>
+          <button class="test-btn" onclick="simulateTest('all-fail')">Test All Providers Fail</button>
+        </div>
+      </div>
+
+      <div>
+        <h3>Environment Variables</h3>
+        <div class="code-block">
+# .env.local<br>
+GEMINI_API_KEY=your_gemini_key<br>
+GROQ_API_KEY=your_groq_key<br>
+OPENROUTER_API_KEY=your_openrouter_key
+        </div>
+
+        <h3>Build Verification</h3>
+        <div class="code-block">
+# Check for TypeScript errors<br>
+npm run build<br><br>
+# Output should show:<br>
+✓ Compiled successfully<br>
+✓ Finished TypeScript<br>
+✓ Generating static pages
+        </div>
+      </div>
+    </div>
+
+    <div id="test-output" class="console-output" style="display: none;"></div>
+  </section>
+
+  <section class="card">
+    <h2>Implementation Details</h2>
+
+    <h3>Modified Files</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Changes</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>.env.local</code></td>
+          <td>Updated GROK_API_KEY → GROQ_API_KEY</td>
+          <td>✅ Done</td>
+        </tr>
+        <tr>
+          <td><code>lib/ai.ts</code></td>
+          <td>Complete refactor with provider abstraction</td>
+          <td>✅ Done</td>
+        </tr>
+        <tr>
+          <td><code>app/api/chat/route.ts</code></td>
+          <td>Updated error handling and logging</td>
+          <td>✅ Done</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Key Features</h3>
+    <ul style="margin-left: var(--spacing-md); margin-bottom: var(--spacing-md);">
+      <li><strong>Automatic Fallback</strong>: No user intervention needed</li>
+      <li><strong>Streaming Support</strong>: All providers support streaming</li>
+      <li><strong>Extensible Design</strong>: Easy to add new providers</li>
+      <li><strong>Detailed Logging</strong>: Clear provider selection tracking</li>
+      <li><strong>Backward Compatible</strong>: Existing API unchanged</li>
+    </ul>
+
+    <h3>Adding New Providers</h3>
+    <div class="code-block">
+// 1. Create provider class
+class NewProvider implements AIProvider {
+  name = 'NewProvider';
+  // Implement required methods
+}
+
+// 2. Add to ProviderRegistry constructor
+this.providers.push(new NewProvider());
+
+// 3. Add environment variable
+NEW_PROVIDER_API_KEY=your_key
+    </div>
+  </section>
+
+  <footer style="margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border); color: var(--color-text-light); font-size: 0.875rem;">
+    <p>✅ <strong>Implementation Complete</strong> - The fallback chain is ready for testing</p>
+    <p>Next steps: Test each provider individually, monitor console logs, and verify fallback behavior.</p>
+  </footer>
+</div>
+
+<script>
+function simulateTest(scenario) {
+  const output = document.getElementById('test-output');
+  output.style.display = 'block';
+  output.innerHTML = '';
+
+  const logs = {
+    normal: [
+      {type: 'info', text: '[API] Chat endpoint called'},
+      {type: 'info', text: '[API] Received request with 3 messages'},
+      {type: 'info', text: '[AI] Trying: Gemini'},
+      {type: 'success', text: '[AI] Responded via: Gemini'},
+      {type: 'info', text: '[API] Streaming complete via Gemini, total length: 245'}
+    ],
+    fallback: [
+      {type: 'info', text: '[AI] Trying: Gemini'},
+      {type: 'error', text: '[AI] Gemini failed: Rate limit exceeded'},
+      {type: 'warning', text: '[AI] Falling back to next provider...'},
+      {type: 'info', text: '[AI] Trying: Groq'},
+      {type: 'success', text: '[AI] Responded via: Groq'}
+    ],
+    'all-fail': [
+      {type: 'info', text: '[AI] Trying: Gemini'},
+      {type: 'error', text: '[AI] Gemini failed: Quota exceeded'},
+      {type: 'warning', text: '[AI] Falling back to next provider...'},
+      {type: 'info', text: '[AI] Trying: Groq'},
+      {type: 'error', text: '[AI] Groq failed: Invalid API key'},
+      {type: 'warning', text: '[AI] Falling back to next provider...'},
+      {type: 'info', text: '[AI] Trying: OpenRouter'},
+      {type: 'success', text: '[AI] Responded via: OpenRouter'}
+    ]
+  };
+
+  logs[scenario].forEach(log => {
+    const line = document.createElement('div');
+    line.className = `log-line log-${log.type}`;
+    line.textContent = log.text;
+    output.appendChild(line);
+  });
+}
+</script>

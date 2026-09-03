@@ -1,0 +1,402 @@
+<title>AI Fallback Chain Implementation</title>
+<style>
+:root {
+  --primary: #7c3aed;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --text: #1f2937;
+  --text-light: #6b7280;
+  --bg: #ffffff;
+  --surface: #f9fafb;
+  --border: #e5e7eb;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --space-xs: 0.5rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --text: #f9fafb;
+    --text-light: #d1d5db;
+    --bg: #111827;
+    --surface: #1f2937;
+    --border: #374151;
+  }
+}
+
+:root[data-theme="dark"] {
+  --text: #f9fafb;
+  --text-light: #d1d5db;
+  --bg: #111827;
+  --surface: #1f2937;
+  --border: #374151;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  padding: var(--space-lg);
+  max-width: 1000px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: var(--space-sm);
+}
+
+h1 {
+  font-size: 2.25rem;
+  color: var(--primary);
+  margin-bottom: var(--space-md);
+}
+
+h2 {
+  font-size: 1.5rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: var(--space-xs);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-md);
+}
+
+h3 {
+  font-size: 1.125rem;
+  margin-top: var(--space-lg);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.code-block {
+  font-family: var(--font-mono);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-md);
+  overflow-x: auto;
+  margin: var(--space-md) 0;
+  font-size: 0.875rem;
+}
+
+.log-line {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 4px;
+  margin-bottom: 2px;
+}
+
+.log-info { background: rgba(124, 58, 237, 0.12); border-left: 3px solid var(--primary); }
+.log-success { background: rgba(16, 185, 129, 0.1); border-left: 3px solid var(--success); }
+.log-error { background: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--error); }
+.log-warning { background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--warning); }
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.badge-primary { background: var(--primary); color: white; }
+.badge-success { background: var(--success); color: white; }
+
+.provider-flow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-xl) 0;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  text-align: center;
+}
+
+.flow-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+  font-size: 1rem;
+}
+
+.flow-arrow {
+  font-size: 1.25rem;
+  color: var(--text-light);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-md) 0;
+}
+
+th, td {
+  padding: var(--space-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  font-weight: 600;
+  background: var(--surface);
+}
+
+.console-output {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-md);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: var(--space-sm);
+}
+
+.test-btn {
+  display: inline-block;
+  background: var(--primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: var(--space-sm);
+}
+
+.test-btn:hover {
+  background: #6d28d9;
+}
+</style>
+<div>
+  <header>
+    <h1>✅ AI Provider Fallback Chain</h1>
+    <p style="color: var(--text-light); margin-bottom: var(--space-md);">Resilient AI chatbot implementation with automatic provider switching</p>
+    <div>
+      <span class="badge badge-success">Implemented</span>
+      <span class="badge badge-primary">TypeScript</span>
+      <span class="badge badge-primary">Next.js</span>
+      <span class="badge badge-primary">5 Providers</span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Fallback Chain Overview</h2>
+    <p>Implementation ensures users always get responses even when individual AI providers hit rate limits or experience outages.</p>
+
+    <div class="provider-flow">
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #7c3aed;">1</div>
+        <div style="font-weight: 500;">Gemini</div>
+        <div style="font-size: 0.75rem; color: var(--text-light);">gemini-3.6-flash</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #a78bfa;">2</div>
+        <div style="font-weight: 500;">Groq</div>
+        <div style="font-size: 0.75rem; color: var(--text-light);">llama-3.3-70b</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #ff6b00;">3</div>
+        <div style="font-weight: 500;">Mistral</div>
+        <div style="font-size: 0.75rem; color: var(--text-light);">mistral-small</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #c4b5fd;">4</div>
+        <div style="font-weight: 500;">SambaNova</div>
+        <div style="font-size: 0.75rem; color: var(--text-light);">Llama-3.1-8B</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" style="background: #ec4899;">5</div>
+        <div style="font-weight: 500;">OpenRouter</div>
+        <div style="font-size: 0.75rem; color: var(--text-light);">Llama-3.1-8B</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Console Log Examples</h2>
+    <p>Safe logging shows provider selection without exposing API keys:</p>
+
+    <div style="margin-bottom: var(--space-md);">
+      <h3>Normal Operation</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-success">[AI] Responded via: Gemini</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: var(--space-md);">
+      <h3>Fallback Scenario</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-error">[AI] Gemini failed: HTTP 429</div>
+        <div class="log-line log-warning">[AI] Falling back to: Groq</div>
+        <div class="log-line log-info">[AI] Trying: Groq</div>
+        <div class="log-line log-success">[AI] Responded via: Groq</div>
+      </div>
+    </div>
+
+    <div>
+      <h3>Complete Fallback</h3>
+      <div class="console-output">
+        <div class="log-line log-info">[AI] Trying: Gemini</div>
+        <div class="log-line log-error">[AI] Gemini failed: Rate limit exceeded</div>
+        <div class="log-line log-warning">[AI] Falling back to: Groq</div>
+        <div class="log-line log-info">[AI] Trying: Groq</div>
+        <div class="log-line log-error">[AI] Groq failed: Quota exceeded</div>
+        <div class="log-line log-warning">[AI] Falling back to: Mistral</div>
+        <div class="log-line log-success">[AI] Responded via: Mistral</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Technical Details</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Model</th>
+          <th>API Endpoint</th>
+          <th>Streaming</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Gemini</strong></td>
+          <td>gemini-3.6-flash</td>
+          <td>Google Generative AI SDK</td>
+          <td>✅ Yes</td>
+        </tr>
+        <tr>
+          <td><strong>Groq</strong></td>
+          <td>llama-3.3-70b-versatile</td>
+          <td>https://api.groq.com/openai/v1/chat/completions</td>
+          <td>✅ Yes</td>
+        </tr>
+        <tr>
+          <td><strong>Mistral</strong></td>
+          <td>mistral-small-latest</td>
+          <td>https://api.mistral.ai/v1/chat/completions</td>
+          <td>✅ Yes</td>
+        </tr>
+        <tr>
+          <td><strong>SambaNova</strong></td>
+          <td>Meta-Llama-3.1-8B-Instruct</td>
+          <td>https://api.sambanova.ai/v1/chat/completions</td>
+          <td>✅ Yes</td>
+        </tr>
+        <tr>
+          <td><strong>OpenRouter</strong></td>
+          <td>meta-llama/llama-3.1-8b-instruct:free</td>
+          <td>https://openrouter.ai/api/v1/chat/completions</td>
+          <td>✅ Yes</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Files Modified</h2>
+    <div class="code-block">
+1. lib/ai.ts           → Complete rewrite with fallback chain
+2. app/api/chat/route.ts → Updated error handling
+3. .env.local          → Added all 5 provider API keys</div>
+
+    <h3 style="margin-top: var(--space-md);">Key Features</h3>
+    <ul style="margin-left: var(--space-md); margin-bottom: var(--space-md); color: var(--text-light);">
+      <li>✅ Automatic fallback on rate limits/errors</li>
+      <li>✅ Streaming support for all providers</li>
+      <li>✅ Safe logging (no API key exposure)</li>
+      <li>✅ TypeScript compilation passes</li>
+      <li>✅ Backward compatible API</li>
+      <li>✅ Environment-based configuration</li>
+    </ul>
+
+    <h3>Testing Instructions</h3>
+    <div class="code-block">
+# Build verification
+npm run build
+
+# Should show:
+✓ Compiled successfully
+✓ Finished TypeScript
+✓ Generating static pages
+
+# Start dev server
+npm run dev
+
+# Test in browser at http://localhost:3000
+# Check console for [AI] logs</div>
+  </div>
+
+  <div class="card">
+    <h2>Environment Configuration</h2>
+    <p>Each provider requires its own API key in <code>.env.local</code>:</p>
+    <div class="code-block">
+GEMINI_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
+MISTRAL_API_KEY=your_key_here
+SAMBANOVA_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here</div>
+
+    <p style="margin-top: var(--space-md); color: var(--text-light); font-size: 0.875rem;">
+      ✅ Implementation complete and ready for testing. The fallback chain ensures service continuity even when individual providers experience issues.
+    </p>
+  </div>
+</div>
+<script>
+// Simple simulation for demo
+document.addEventListener('DOMContentLoaded', function() {
+  const testBtns = document.querySelectorAll('.test-btn');
+  if (testBtns.length) {
+    testBtns[0].addEventListener('click', function() {
+      alert('Demo: Fallback chain is implemented and ready for testing.\n\nTo test:\n1. Start dev server: npm run dev\n2. Open chat interface\n3. Send a message\n4. Check console for [AI] logs');
+    });
+  }
+});
+</script>

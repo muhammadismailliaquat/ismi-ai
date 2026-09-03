@@ -1,69 +1,125 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import { MessageSquare, Sparkles, Zap, Phone, Globe } from 'lucide-react';
+import { ParticleBackground } from '@/components/ParticleBackground';
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <>
+      {/* Animated particle swarm galaxy behind the homepage */}
+      <ParticleBackground />
+      {/* Subtle scrim so the text stays readable over the bright particles */}
+      <div className="fixed inset-0 z-[1] pointer-events-none bg-black/25" aria-hidden="true" />
+
+      <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-8">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="text-center max-w-4xl"
+      >
+        {/* Logo */}
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="mb-8 inline-flex items-center gap-3"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-[#7c3aed] flex items-center justify-center shadow-sm">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-6xl font-bold text-white drop-shadow">ismi.ai</h1>
+        </motion.div>
+
+        {/* Tagline */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-2xl text-[#e2e8f0] mb-12 max-w-2xl mx-auto"
+        >
+          Your intelligent AI assistant for conversations, research, and creative thinking
+        </motion.p>
+
+        {/* CTA Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
+        >
+          <Link href="/chat">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center gap-2 text-lg px-8 py-4 rounded-xl bg-[#7c3aed]/55 backdrop-blur-[2px] border border-[#a78bfa]/40 text-white font-semibold shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:bg-[#7c3aed]/70 transition-all"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <MessageSquare className="w-5 h-5" />
+              Start Chatting
+            </motion.button>
+          </Link>
+        </motion.div>
+
+        {/* Features */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"
+        >
+          {[
+            {
+              icon: <Zap className="w-8 h-8 text-[#a78bfa]" />,
+              title: 'Lightning Fast',
+              description: 'Get instant responses powered by Ismi.ai',
+            },
+            {
+              icon: <Phone className="w-8 h-8 text-[#a78bfa]" />,
+              title: 'Voice Mode',
+              description: 'Natural voice conversations with real-time interaction',
+            },
+            {
+              icon: <Globe className="w-8 h-8 text-[#5eead4]" />,
+              title: 'Smart & Knowledgeable',
+              description: 'Research, creative writing, and problem-solving made easy',
+            },
+          ].map((feature, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.9 + i * 0.1 }}
+              className="rounded-2xl p-6 text-left border border-blue-200/20 bg-blue-500/10 backdrop-blur-[2px] shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:bg-blue-500/15 transition-all"
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+              <div className="mb-4">{feature.icon}</div>
+              <h3 className="text-xl font-semibold mb-2 text-white">{feature.title}</h3>
+              <p className="text-[#cbd5e1] text-sm">{feature.description}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+      </motion.div>
+
+      {/* Footer */}
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.2 }}
+        className="mt-16 text-center text-[#6b7280] dark:text-[#94a3b8] text-sm"
+      >
+      </motion.footer>
       </main>
-    </div>
+    </>
   );
 }
