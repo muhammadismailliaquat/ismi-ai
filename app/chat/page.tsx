@@ -337,76 +337,97 @@ export default function ChatPage() {
           timestamp: new Date().toISOString(),
         };
 
+        // SSE parser (chunk-safe): never assume a single reader.read() maps
+        // to a complete SSE event. We buffer text and process events only
+        // when we reach the SSE event boundary (blank line).
+        let sseBuffer = '';
+        let eventData = '';
+
+        const applyAssistantText = (delta: string) => {
+          assistantContent += delta;
+          assistantMessage.content = assistantContent;
+
+          // Update UI while streaming
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+
+            // Don't update if user switched conversation
+            if (prev.id !== thisConvoId) {
+              return prev;
+            }
+
+            const messages = [...prev.messages];
+
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage && lastMessage.role === 'assistant') {
+              messages[messages.length - 1] = assistantMessage;
+            } else {
+              messages.push(assistantMessage);
+            }
+
+            return {
+              ...prev,
+              messages,
+            };
+          });
+        };
+
+        const flushEvent = () => {
+          const data = eventData.trim();
+          eventData = '';
+
+          if (!data) return;
+          if (data === '[DONE]') return;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed?.error) {
+              throw new Error(parsed.error);
+            }
+            if (typeof parsed?.text === 'string' && parsed.text) {
+              applyAssistantText(parsed.text);
+            }
+          } catch (parseError) {
+            console.error('[Chat] Parse error:', parseError);
+          }
+        };
+
         while (true) {
           const { done, value } = await reader.read();
-
           if (done) break;
 
-          const chunk = decoder.decode(value, {
-            stream: true,
-          });
+          sseBuffer += decoder.decode(value, { stream: true });
 
-          const lines = chunk
-            .split('\n')
-            .filter((line) => line.startsWith('data: '));
+          // Process complete lines; keep any trailing partial line in buffer.
+          const lines = sseBuffer.split(/\r?\n/);
+          sseBuffer = lines.pop() || '';
 
-          for (const line of lines) {
-            const data = line.replace('data: ', '');
+          for (const rawLine of lines) {
+            const line = rawLine ?? '';
 
-            if (data === '[DONE]') {
+            // Blank line => end of one SSE event.
+            if (line.trim() === '') {
+              flushEvent();
               continue;
             }
 
-            try {
-              const parsed = JSON.parse(data);
-
-              if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-
-              if (parsed.text) {
-                assistantContent += parsed.text;
-
-                assistantMessage.content = assistantContent;
-
-                // Update UI while streaming
-                setCurrentConversation((prev) => {
-                  if (!prev) return prev;
-
-                  // Don't update if user switched conversation
-                  if (prev.id !== thisConvoId) {
-                    return prev;
-                  }
-
-                  const messages = [...prev.messages];
-
-                  const lastMessage =
-                    messages[messages.length - 1];
-
-                  if (
-                    lastMessage &&
-                    lastMessage.role === 'assistant'
-                  ) {
-                    messages[messages.length - 1] =
-                      assistantMessage;
-                  } else {
-                    messages.push(assistantMessage);
-                  }
-
-                  return {
-                    ...prev,
-                    messages,
-                  };
-                });
-              }
-            } catch (parseError) {
-              console.error(
-                '[Chat] Parse error:',
-                parseError
-              );
+            // We only care about data: lines.
+            if (line.startsWith('data: ')) {
+              const chunk = line.slice(6);
+              // Multiple data: lines in one event should be concatenated.
+              eventData += (eventData ? '\n' : '') + chunk;
             }
           }
         }
+
+        // Stream ended; if we have complete event content already buffered,
+        // flush it (but only if it forms a valid JSON payload).
+        if (eventData.trim()) {
+          flushEvent();
+        }
+
+        // Ensure loading stops.
+        // Save final assistant response
 
         // Save final assistant response
         if (assistantContent) {

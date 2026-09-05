@@ -45,35 +45,88 @@ async function* processOpenAIStream(response: Response): AsyncGenerator<string> 
   }
 
   const decoder = new TextDecoder();
-  let buffer = '';
+
+  // Chunk-safe SSE parser:
+  // - Never assume a network chunk matches an SSE event
+  // - Only parse when we have complete `data:` payload text
+  // - Never lose partial JSON/text chunks across chunk boundaries
+  let sseBuffer = '';
+  let eventData = '';
+
+  const tryParseAndYield = () => {
+    const payload = eventData.trim();
+    if (!payload) return false;
+    if (payload === '[DONE]') return 'DONE' as const;
+
+    try {
+      const parsed = JSON.parse(payload);
+      const content = parsed?.choices?.[0]?.delta?.content;
+      // Clear buffered data once it's parseable, so we don't parse/yield twice.
+      eventData = '';
+
+      if (content) {
+        return content;
+      }
+
+      return true;
+    } catch {
+      // Incomplete JSON — wait for more `data:` lines or the event boundary.
+      return false;
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+    sseBuffer += decoder.decode(value, { stream: true });
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        if (data === '[DONE]') {
-          return;
-        }
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            yield content;
-          }
-        } catch {
-          // Skip invalid JSON
-        }
+    // Split into lines but keep the trailing partial line in buffer.
+    const lines = sseBuffer.split(/\r?\n/);
+    sseBuffer = lines.pop() || '';
+
+    for (const rawLine of lines) {
+      const line = rawLine ?? '';
+
+      // Blank line ends one SSE event.
+      if (line.trim() === '') {
+        const parsed = tryParseAndYield();
+        if (parsed === 'DONE') return;
+        // If parsing failed, drop buffer at event boundary to avoid indefinite growth.
+        if (parsed === false) eventData = '';
+        continue;
       }
+
+      // OpenAI-compatible SSE uses `data: <json>` lines.
+      if (!line.startsWith('data: ')) continue;
+
+      const chunk = line.slice(6).trim();
+      if (!chunk) continue;
+      if (chunk === '[DONE]') {
+        return;
+      }
+
+      // Support multi-line `data:` events by concatenating.
+      eventData += (eventData ? '\n' : '') + chunk;
+
+      // If the payload became parseable earlier than the blank-line boundary,
+      // yield immediately.
+      const parsed = tryParseAndYield();
+      if (parsed && parsed !== true && parsed !== 'DONE') {
+        yield parsed;
+      }
+      // If `parsed` is true, it means parse succeeded but no content was present.
+      // If parsed === false, keep buffering.
     }
   }
+
+  // End of stream: attempt to parse any remaining buffered event.
+  const parsed = tryParseAndYield();
+  if (typeof parsed === 'string' && parsed !== '[DONE]') {
+    yield parsed;
+  }
 }
+
 
 // Provider implementations
 async function* tryGemini(messages: ChatMessage[], systemPrompt?: string): AsyncGenerator<string> {
@@ -159,25 +212,31 @@ async function* tryGroq(messages: ChatMessage[], systemPrompt?: string): AsyncGe
 }
 
 async function* tryMistral(messages: ChatMessage[], systemPrompt?: string): AsyncGenerator<string> {
-  const apiKey = process.env.MISTRAL_API_KEY;
+  // Keep provider name/logging as "Mistral" for fallback-chain compatibility,
+  // but route the actual request via OpenRouter.
+  // (User requested Mistral -> OpenRouter mapping.)
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error('Mistral API not configured');
+    throw new Error('OpenRouter API not configured');
   }
 
   console.log('[AI] Trying: Mistral');
 
-  const endpoint = 'https://api.mistral.ai/v1/chat/completions';
+  const endpoint = 'https://openrouter.ai/api/v1/chat/completions';
   const formattedMessages = formatMessagesForOpenAI(messages, systemPrompt);
 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-OpenRouter-Title': 'ismi.ai',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'mistral-tiny-latest',
+        // Keep model name exactly as user provided.
+        model: '~openai/gpt-latest',
         messages: formattedMessages,
         stream: true,
         max_tokens: 2048,
@@ -248,7 +307,7 @@ async function* tryOpenRouter(messages: ChatMessage[], systemPrompt?: string): A
         'HTTP-Referer': 'http://localhost:3000',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        model: 'meta-llama/llama-3.1-8b-instruct',
         messages: formattedMessages,
         stream: true,
         max_tokens: 2048,
@@ -405,7 +464,7 @@ async function sendWithOpenRouter(messages: ChatMessage[], systemPrompt?: string
       'HTTP-Referer': 'http://localhost:3000',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: 'meta-llama/llama-3.1-8b-instruct',
       messages: formattedMessages,
       max_tokens: 2048,
       temperature: 0.3,

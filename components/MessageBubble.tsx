@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -18,22 +18,33 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [codeVisible, setCodeVisible] = useState(false);
-  const codeContainerRef = useState<HTMLDivElement | null>(null);
+  // Store visibility without forcing rerenders (observer callback can fire a lot).
+  const codeVisibleRef = useRef(false);
 
   // Track code block visibility with IntersectionObserver
-  useState(() => {
+  // (Avoid useState-driven observer setup; useEffect does setup/cleanup.)
+  useEffect(() => {
     const codeId = `code-${content.slice(0, 20).replace(/[^a-z0-9]/gi, '')}`;
     const codeEl = document.getElementById(codeId);
     if (!codeEl) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => setCodeVisible(entry.isIntersecting),
+      ([entry]) => {
+        // Keep the callback lightweight; if we need to trigger UI later,
+        // do it here without creating a new observer each render.
+        codeVisibleRef.current = entry.isIntersecting;
+        // If later you need UI changes based on visibility, you can set state here.
+        // For now we keep it leak-free and rerender-free.
+      },
       { threshold: 0 }
     );
+
     observer.observe(codeEl);
-    return () => observer.disconnect();
-  });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [content]);
 
   const handleCopyMessage = useCallback(async () => {
     await navigator.clipboard.writeText(content);

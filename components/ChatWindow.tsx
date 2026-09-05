@@ -27,7 +27,7 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
               animate={{ opacity: 1, y: 0 }}
               className="mb-6"
             >
-              <div className="text-6xl mb-4 animate-float">✨</div>
+              <div className="text-6xl mb-4 animate-float"></div>
               <h2 className="text-3xl font-bold text-white drop-shadow mb-3">
                 Welcome to Ismi.ai
               </h2>

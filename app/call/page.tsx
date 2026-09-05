@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Mic, MicOff, PhoneOff, MessageSquare, Loader2, Play, Pause } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChatMessage } from '@/types/chat';
-import { storage } from '@/lib/storage';
+import { Mic, MicOff, PhoneOff, StopCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+
+import { ParticleBackground } from '@/components/ParticleBackground';
 import { useSpeechRecognition } from '@/lib/speech';
 import { readTtsVoice } from '@/lib/ttsVoices';
-import { VoiceOrb } from '@/components/VoiceOrb';
+
+import { ChatConversation, ChatMessage } from '@/types/chat';
+import { storage } from '@/lib/storage';
 
 type ChatStreamResult = { ok: true; text: string } | Response;
+
+type Phase = 'precall' | 'ready' | 'listening' | 'thinking' | 'speaking' | 'error';
 
 function jsonError(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
@@ -20,116 +23,103 @@ function jsonError(message: string, status: number) {
   });
 }
 
-// Jellyfish particle background
-function JellyfishBackground() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationId: number;
-    let particles: Array<{
-      x: number; y: number; vx: number; vy: number;
-      size: number; alpha: number; color: string;
-    }> = [];
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const colors = ['#a78bfa', '#60a5fa', '#7c3aed', '#06b6d4', '#8b5cf6'];
-
-    const initParticles = () => {
-      particles = [];
-      const count = Math.floor((canvas.width * canvas.height) / 15000);
-      for (let i = 0; i < count; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 0.5,
-          vy: -Math.random() * 0.8 - 0.2,
-          size: Math.random() * 4 + 1,
-          alpha: Math.random() * 0.5 + 0.1,
-          color: colors[Math.floor(Math.random() * colors.length)],
-        });
-      }
-    };
-    initParticles();
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      particles.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.alpha += (Math.random() - 0.5) * 0.02;
-        p.alpha = Math.max(0.05, Math.min(0.6, p.alpha));
-
-        if (p.y < -10) {
-          p.y = canvas.height + 10;
-          p.x = Math.random() * canvas.width;
-        }
-        if (p.x < -10) p.x = canvas.width + 10;
-        if (p.x > canvas.width + 10) p.x = -10;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.fill();
-
-        // Glow
-        const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
-        gradient.addColorStop(0, p.color);
-        gradient.addColorStop(1, 'transparent');
-        ctx.fillStyle = gradient;
-        ctx.globalAlpha = p.alpha * 0.3;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      ctx.globalAlpha = 1;
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationId);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 w-full h-full"
-      style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0b1220 50%, #0f172a 100%)' }}
-    />
-  );
-}
-
 export default function CallPage() {
   const router = useRouter();
-  const [inputText, setInputText] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+
+  const [youTranscript, setYouTranscript] = useState('');
   const [assistantText, setAssistantText] = useState('');
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioStatus, setAudioStatus] = useState<'idle' | 'playing' | 'paused'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // Single source of truth for call controls.
+  const [phase, setPhase] = useState<Phase>('precall');
+  const phaseRef = useRef<Phase>('precall');
 
-  const ttsVoice = useMemo(() => readTtsVoice(), []);
+  // Avoid stale scheduled restarts.
+  const restartSeqRef = useRef(0);
+  const restartSilenceCountRef = useRef(0);
+
+  const transitionTo = useCallback((next: Phase) => {
+    phaseRef.current = next;
+    setPhase(next);
+
+    // Any phase change cancels previous scheduled work logically.
+    restartSeqRef.current += 1;
+
+    if (next === 'listening') {
+      restartSilenceCountRef.current = 0;
+    }
+  }, []);
+
+  const isListeningLocal = phase === 'listening';
+  const isGenerating = phase === 'thinking';
+  const callActive = phase !== 'precall';
+  const audioStatus: 'idle' | 'playing' = phase === 'speaking' ? 'playing' : 'idle';
+
+  // Strip markdown formatting from AI response text.
+  const stripMarkdown = useCallback((text: string) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1') // bold
+      .replace(/\*(.*?)\*/g, '$1') // italic
+      .replace(/^#+\s*/gm, '') // headings
+      .replace(/^>\s*/gm, '') // blockquotes
+      .replace(/`{1,3}[^`]*`{1,3}/g, '') // code
+      .replace(/^\s*[-*+]\s+/gm, '') // list items
+      .replace(/^\s*\d+\.\s+/gm, '') // numbered lists
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // links
+      .replace(/\n{3,}/g, '\n\n') // extra newlines
+      .trim();
+  }, []);
+
+  const currentCallConversationIdRef = useRef<string | null>(null);
+  const currentCallConversationRef = useRef<ChatConversation | null>(null);
+
+  const ensureCallConversation = useCallback(async () => {
+    // Create ONE conversation for the entire active voice call session.
+    if (currentCallConversationIdRef.current) {
+      if (!currentCallConversationRef.current) {
+        const existing = await storage.getConversation(
+          currentCallConversationIdRef.current
+        );
+        currentCallConversationRef.current = existing;
+      }
+      storage.setCurrentChatId(currentCallConversationIdRef.current);
+      return;
+    }
+
+    const convo = storage.createConversation('Voice Call Conversation');
+    currentCallConversationIdRef.current = convo.id;
+    currentCallConversationRef.current = convo;
+
+    // Persist immediately so /chat sidebar can show it.
+    await storage.saveConversation(convo);
+
+    // Make this the current sidebar conversation when the user returns to /chat.
+    storage.setCurrentChatId(convo.id);
+  }, []);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+  const ttsAbortRef = useRef<AbortController | null>(null);
+
+  const stopTts = useCallback(() => {
+    ttsAbortRef.current?.abort();
+    ttsAbortRef.current = null;
+
+    // Keep UI updates driven by phase; just stop audio here.
+    try {
+      audioRef.current?.pause();
+      audioRef.current && (audioRef.current.currentTime = 0);
+    } catch {}
+
+    // Revoke any previous blob URL to avoid memory leaks.
+    try {
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
+    } catch {}
+  }, []);
 
   const voiceRate = useMemo(() => {
     if (typeof window === 'undefined') return 1;
@@ -143,55 +133,92 @@ export default function CallPage() {
     return 1;
   }, []);
 
-  const stopAudio = useCallback(() => {
+  const voicePitch = useMemo(() => {
+    if (typeof window === 'undefined') return 1;
     try {
-      if (audioRef.current) audioRef.current.pause();
+      const raw = localStorage.getItem('ismi_settings');
+      if (!raw) return 1;
+      const parsed = JSON.parse(raw);
+      const v = parsed?.voicePitch;
+      if (typeof v === 'number' && !Number.isNaN(v)) return v;
     } catch {}
-    setAudioStatus('idle');
+    return 1;
   }, []);
 
-  const revokeAudioUrl = useCallback((url: string | null) => {
-    if (!url) return;
-    try { URL.revokeObjectURL(url); } catch {}
+  const startListeningFnRef = useRef<null | (() => void)>(null);
+
+  const startListeningFromPhase = useCallback(() => {
+    // Only start when we are truly in listening phase.
+    if (phaseRef.current !== 'listening') return;
+    startListeningFnRef.current?.();
   }, []);
 
-  const handleSpeechResult = useCallback((finalTranscript: string) => {
-    const cleaned = (finalTranscript || '').trim();
-    setInputText(cleaned);
-    setIsListening(false);
-  }, []);
+  const scheduleSilenceRestart = useCallback(
+    (delayMs: number = 200) => {
+      const seq = ++restartSeqRef.current;
+      const attempt = () => {
+        if (restartSeqRef.current !== seq) return;
+        if (phaseRef.current !== 'listening') return;
 
-  const handleSpeechError = useCallback((msg: string) => {
-    setError(msg || 'Voice input failed');
-    setIsListening(false);
-  }, []);
+        restartSilenceCountRef.current += 1;
+        if (restartSilenceCountRef.current > 6) {
+          // Give up and wait for user.
+          transitionTo('ready');
+          return;
+        }
+
+        startListeningFromPhase();
+      };
+
+      window.setTimeout(attempt, delayMs);
+    },
+    [startListeningFromPhase, transitionTo]
+  );
 
   const { startListening, stopListening, isSupported } = useSpeechRecognition({
-    onResult: handleSpeechResult,
-    onError: handleSpeechError,
+    onResult: (finalTranscript) => {
+      const cleaned = (finalTranscript || '').trim();
+
+      // Recognition produced final transcript -> move to thinking.
+      if (!cleaned) {
+        // Stay in call but stop mic until user asks again.
+        transitionTo('ready');
+        return;
+      }
+
+      setError(null);
+      setYouTranscript(cleaned);
+      transitionTo('thinking');
+      generateFromTranscript(cleaned);
+    },
+    onInterimResult: (transcript) => {
+      if (phaseRef.current !== 'listening') return;
+      setError(null);
+      setYouTranscript((transcript || '').trim());
+    },
+    onError: (msg) => {
+      if (msg === 'no-speech') {
+        if (phaseRef.current === 'listening') {
+          scheduleSilenceRestart(200);
+        }
+        return;
+      }
+
+      setError(msg || 'Voice input failed');
+      transitionTo('error');
+    },
+    onEnd: () => {
+      // Web Speech API often stops on silence.
+      if (phaseRef.current === 'listening') {
+        scheduleSilenceRestart(200);
+        return;
+      }
+
+      // If we ended while not listening, ignore.
+    },
     continuous: false,
     language: 'en-US',
   });
-
-  const toggleListening = useCallback(() => {
-    setError(null);
-    if (isListening) {
-      stopListening();
-      setIsListening(false);
-    } else {
-      setInputText('');
-      setAssistantText('');
-      revokeAudioUrl(audioUrl);
-      setAudioUrl(null);
-      stopAudio();
-      if (!isSupported) {
-        setError('Voice recognition not supported');
-        return;
-      }
-      setIsListening(true);
-      startListening();
-    }
-  }, [isListening, isSupported, startListening, stopListening, audioUrl, revokeAudioUrl, stopAudio]);
 
   const parseChatStream = useCallback(async (response: Response): Promise<ChatStreamResult> => {
     if (!response.ok) {
@@ -216,6 +243,8 @@ export default function CallPage() {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line.
       const parts = buffer.split('\n\n');
       buffer = parts.pop() || '';
 
@@ -223,294 +252,421 @@ export default function CallPage() {
         for (const line of part.split('\n')) {
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
-          if (data === '[DONE]') return { ok: true, text: assistant };
+
+          if (data === '[DONE]') {
+            return { ok: true as const, text: assistant };
+          }
 
           try {
             const parsed = JSON.parse(data);
-            if (parsed?.error) return jsonError(String(parsed.error), 500);
-            if (typeof parsed?.text === 'string') assistant += parsed.text;
-          } catch {}
+            if (parsed?.error) {
+              return jsonError(String(parsed.error), 500);
+            }
+            if (typeof parsed?.text === 'string') {
+              assistant += parsed.text;
+              setAssistantText(stripMarkdown(assistant));
+            }
+          } catch {
+            // Ignore non-JSON chunks.
+          }
         }
       }
     }
-    return { ok: true, text: assistant };
-  }, []);
 
-  const fetchTtsAndPlay = useCallback(async (text: string) => {
-    stopAudio();
-    revokeAudioUrl(audioUrl);
-    setAudioUrl(null);
-    setAudioStatus('idle');
+    return { ok: true as const, text: assistant };
+  }, [stripMarkdown]);
 
-    const qs = new URLSearchParams({
-      text: text.slice(0, 980),
-      voice: ttsVoice,
-      rate: String(voiceRate),
-    });
+  const fetchTtsAndPrepareAudio = useCallback(
+    async (text: string) => {
+      // Do not let speech recognition restart while we speak.
+      stopListening();
+      stopTts();
 
-    const res = await fetch(`/api/tts?${qs.toString()}`, { signal: abortRef.current?.signal });
-
-    if (!res.ok) {
-      if (res.status === 401) { router.push('/login'); return; }
-      throw new Error(`TTS failed (${res.status})`);
-    }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    setAudioUrl(url);
-
-    try {
-      if (!audioRef.current) audioRef.current = new Audio();
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        await audioRef.current.play();
-        setAudioStatus('playing');
-      }
-    } catch {
-      setAudioStatus('paused');
-    }
-  }, [ttsVoice, voiceRate, audioUrl, revokeAudioUrl, stopAudio, router]);
-
-  const handleGenerate = useCallback(async () => {
-    const text = inputText.trim();
-    if (!text) {
-      setError('Say something first or type your message.');
-      return;
-    }
-    setError(null);
-    setIsGenerating(true);
-    setAssistantText('');
-
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: text }] }),
-        signal: abortRef.current.signal,
+      const qs = new URLSearchParams({
+        text: text.slice(0, 980),
+        voice: readTtsVoice(),
+        rate: String(voiceRate),
       });
 
-      const parsed = await parseChatStream(response);
-      if (parsed instanceof Response) {
-        if (parsed.status === 401) { router.push('/login'); return; }
-        const errJson = await parsed.json().catch(() => null);
-        throw new Error((errJson as { error?: string })?.error || 'Chat failed');
+      // Connect existing voicePitch setting to TTS API.
+      // Map slider value (0.5–2) to SSML relative pitch percentage.
+      const pitchDelta = voicePitch - 1;
+      if (Math.abs(pitchDelta) > 1e-6) {
+        const rel = Math.round(pitchDelta * 100);
+        qs.set('pitch', `${rel >= 0 ? '+' : ''}${rel}%`);
       }
 
-      const content = parsed.text || '';
-      setAssistantText(content);
+      ttsAbortRef.current?.abort();
+      ttsAbortRef.current = new AbortController();
 
-      if (content.trim()) {
-        await fetchTtsAndPlay(content);
+      const res = await fetch(`/api/tts?${qs.toString()}`, {
+        signal: ttsAbortRef.current.signal,
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error(`TTS failed (${res.status})`);
       }
-    } catch (e) {
-      if ((e as Error)?.name === 'AbortError') return;
-      setError((e as Error)?.message || 'Failed to generate response');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [inputText, parseChatStream, fetchTtsAndPlay, router]);
 
-  const togglePlayPause = useCallback(async () => {
-    if (!audioRef.current && audioUrl) {
-      audioRef.current = new Audio(audioUrl);
-    }
-    if (!audioRef.current) return;
+      const blob = await res.blob();
 
-    if (audioStatus === 'playing') {
-      audioRef.current.pause();
-      setAudioStatus('paused');
-    } else {
+      // Revoke previous blob URL (if any) before replacing it.
       try {
+        if (audioObjectUrlRef.current) {
+          URL.revokeObjectURL(audioObjectUrlRef.current);
+          audioObjectUrlRef.current = null;
+        }
+      } catch {}
+
+      const url = URL.createObjectURL(blob);
+      audioObjectUrlRef.current = url;
+
+      try {
+        if (!audioRef.current) audioRef.current = new Audio();
+        audioRef.current.src = url;
+
+        audioRef.current.onplaying = () => {
+          transitionTo('speaking');
+        };
+
+        // After playback finishes: back to listening.
+        audioRef.current.onended = () => {
+          try {
+            if (audioObjectUrlRef.current) {
+              URL.revokeObjectURL(audioObjectUrlRef.current);
+              audioObjectUrlRef.current = null;
+            }
+          } catch {}
+
+          transitionTo('listening');
+          startListeningFromPhase();
+        };
+
+        audioRef.current.onerror = () => {
+          try {
+            if (audioObjectUrlRef.current) {
+              URL.revokeObjectURL(audioObjectUrlRef.current);
+              audioObjectUrlRef.current = null;
+            }
+          } catch {}
+
+          transitionTo('ready');
+        };
+
+        transitionTo('thinking');
         await audioRef.current.play();
-        setAudioStatus('playing');
       } catch {
-        setAudioStatus('paused');
+        transitionTo(phaseRef.current === 'thinking' ? 'ready' : phaseRef.current);
+        try {
+          if (audioObjectUrlRef.current) {
+            URL.revokeObjectURL(audioObjectUrlRef.current);
+            audioObjectUrlRef.current = null;
+          } else {
+            URL.revokeObjectURL(url);
+          }
+        } catch {}
       }
+    },
+    [router, stopListening, stopTts, startListeningFromPhase, transitionTo, voiceRate]
+  );
+
+  const generateFromTranscript = useCallback(
+    async (finalTranscript: string) => {
+      const cleaned = (finalTranscript || '').trim();
+      if (!cleaned) return;
+
+      stopTts();
+      setError(null);
+      setAssistantText('');
+
+      chatAbortRef.current?.abort();
+      chatAbortRef.current = new AbortController();
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: cleaned }],
+          }),
+          signal: chatAbortRef.current.signal,
+        });
+
+        const parsed = await parseChatStream(response);
+        if (parsed instanceof Response) {
+          if (parsed.status === 401) {
+            router.push('/login');
+            return;
+          }
+          const err = await parsed.json().catch(() => null);
+          throw new Error((err as { error?: string })?.error || 'Chat failed');
+        }
+
+        const assistantContent = parsed.text || '';
+
+        const userMessage: ChatMessage = {
+          id: storage.generateId(),
+          role: 'user',
+          content: cleaned,
+          timestamp: new Date().toISOString(),
+        };
+
+        const assistantMessage: ChatMessage = {
+          id: storage.generateId(),
+          role: 'assistant',
+          content: assistantContent,
+          timestamp: new Date().toISOString(),
+        };
+
+        // IMPORTANT: One active voice call session = ONE conversation.
+        try {
+          await ensureCallConversation();
+          const convo = currentCallConversationRef.current;
+
+          if (convo) {
+            convo.messages.push(userMessage, assistantMessage);
+            convo.updatedAt = new Date().toISOString();
+            await storage.saveConversation(convo);
+          }
+        } catch {}
+
+        if (assistantContent.trim()) {
+          // Keep listening blocked until audio finishes.
+          await fetchTtsAndPrepareAudio(stripMarkdown(assistantContent));
+          return;
+        }
+
+        // No audio -> wait for user.
+        transitionTo('ready');
+      } catch (e: unknown) {
+        if ((e as Error)?.name === 'AbortError') return;
+        setError((e as Error)?.message || 'Failed to generate voice response');
+        transitionTo('error');
+      }
+    },
+    [
+      fetchTtsAndPrepareAudio,
+      ensureCallConversation,
+      parseChatStream,
+      router,
+      stopTts,
+      stripMarkdown,
+      transitionTo,
+    ]
+  );
+
+  const startListeningSafe = useCallback(() => {
+    if (!isSupported) {
+      setError('Voice recognition is not supported in this browser.');
+      transitionTo('error');
+      return;
     }
-  }, [audioStatus, audioUrl]);
+
+    setError(null);
+    setAssistantText('');
+    setYouTranscript('');
+
+    transitionTo('listening');
+
+    // Start now.
+    startListening();
+  }, [isSupported, startListening, transitionTo]);
+
+  const stopListeningSafe = useCallback(() => {
+    stopListening();
+    transitionTo('ready');
+  }, [stopListening, transitionTo]);
+
+  const handleMic = useCallback(() => {
+    // Speaking -> Stop AI and resume listening.
+    if (audioStatus === 'playing') {
+      stopTts();
+      setError(null);
+      setAssistantText('');
+      setYouTranscript('');
+
+      stopListening();
+      transitionTo('listening');
+      startListening();
+      return;
+    }
+
+    // While thinking, ignore mic presses.
+    if (phaseRef.current === 'thinking') return;
+
+    // Listening -> Mic off.
+    if (phaseRef.current === 'listening') {
+      stopListeningSafe();
+      return;
+    }
+
+    // Ready/Error/Precall -> Mic on.
+    startListeningSafe();
+  }, [
+    audioStatus,
+    startListening,
+    startListeningSafe,
+    stopListening,
+    stopListeningSafe,
+    stopTts,
+    transitionTo,
+  ]);
+
+  const handleBackToChat = useCallback(() => {
+    transitionTo('precall');
+    chatAbortRef.current?.abort();
+    ttsAbortRef.current?.abort();
+
+    currentCallConversationIdRef.current = null;
+    currentCallConversationRef.current = null;
+
+    try {
+      stopListening();
+    } catch {}
+
+    stopTts();
+    router.push('/chat');
+  }, [router, stopListening, stopTts, transitionTo]);
 
   const handleEndCall = useCallback(() => {
-    abortRef.current?.abort();
-    stopListening();
-    stopAudio();
-    revokeAudioUrl(audioUrl);
-    router.push('/chat');
-  }, [stopListening, stopAudio, revokeAudioUrl, audioUrl, router]);
+    handleBackToChat();
+  }, [handleBackToChat]);
+
+  useEffect(() => {
+    // Cleanup when leaving the page.
+    return () => {
+      chatAbortRef.current?.abort();
+      ttsAbortRef.current?.abort();
+      try {
+        stopListening();
+      } catch {}
+      stopTts();
+    };
+  }, [stopListening, stopTts]);
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <JellyfishBackground />
+      <ParticleBackground variant="bloom" />
 
-      {/* Header */}
-      <div className="relative z-10 flex items-center justify-between p-4">
-        <Link
-          href="/chat"
-          className="flex items-center gap-2 text-[#94a3b8] hover:text-white transition-colors"
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-sm">Back to Chat</span>
-        </Link>
-        <h1 className="text-lg font-semibold text-white">Voice Call</h1>
-        <div className="w-24" />
+      {/* Persistent status box at top */}
+      <div className="absolute top-[120px] left-1/2 -translate-x-1/2 z-20 inline-flex w-auto max-w-2xl px-4 flex-col">
+        <div className="rounded-2xl backdrop-blur-xl bg-blue-500/20 border border-blue-200/25 shadow-[0_10px_40px_rgba(0,0,0,0.35)] overflow-hidden flex flex-col">
+
+          {/* Main status label */}
+          <div className="px-4 py-2 text-center text-sm font-medium text-white/90 border-b border-white/10">
+            {error
+              ? 'Error'
+              : isListeningLocal
+                ? 'Listening'
+                : isGenerating
+                  ? 'Thinking'
+                  : audioStatus === 'playing'
+                    ? 'Speaking'
+                    : 'Tap mic to start'}
+          </div>
+
+          {/* Inner transcript box — shows user speech while speaking */}
+          {isListeningLocal && youTranscript.trim().length > 0 ? (
+            <div className="px-3 py-2">
+              <div className="rounded-xl bg-white/10 backdrop-blur-md border border-white/15 px-3 py-2 min-h-[40px] max-h-[100px] overflow-y-auto">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-semibold text-white/80 shrink-0">You:</span>
+                  <span className="text-xs text-white/90 whitespace-pre-wrap break-words">{youTranscript}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {audioStatus === 'playing' && assistantText.trim().length > 0 ? (
+            <div className="px-3 py-2">
+              <div className="rounded-xl bg-white/10 backdrop-blur-md border border-white/15 px-3 py-2 min-h-[40px] max-h-[100px] overflow-y-auto">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-semibold text-white/80 shrink-0">Ismi:</span>
+                  <span className="text-xs text-white/90 whitespace-pre-wrap break-words leading-relaxed">{assistantText}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-[calc(100vh-80px)] px-4">
-        {/* Voice Orb */}
-        <motion.div
-          className="w-56 h-56 rounded-full mb-8"
-          animate={{ scale: isListening ? 1.05 : 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <VoiceOrb
-            audioLevel={isListening ? 0.9 : 0.2}
-            state={isGenerating ? 'thinking' : isListening ? 'listening' : 'idle'}
-          />
-        </motion.div>
+      {/* Error display */}
+      {error ? (
+        <div className="absolute top-[340px] left-1/2 -translate-x-1/2 z-30 w-full max-w-2xl px-4">
+          <div className="rounded-xl bg-red-500/20 border border-red-400/30 px-4 py-2 text-sm text-red-200 text-center">
+            {error}
+          </div>
+        </div>
+      ) : null}
 
-        {/* Status */}
-        <p className="text-[#94a3b8] text-sm mb-8 text-center">
-          {isListening
-            ? 'Listening...'
-            : isGenerating
-            ? 'Thinking...'
-            : audioStatus === 'playing'
-            ? 'Speaking...'
-            : 'Tap mic to start'}
-        </p>
+      {/* Main content area */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-[240px] pb-[160px]">
+      </div>
 
-        {/* Your message */}
-        {inputText && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 max-w-md w-full"
-          >
-            <p className="text-xs text-[#64748b] mb-1">You:</p>
-            <div className="rounded-xl bg-white/5 border border-blue-200/15 px-4 py-3 text-[#e2e8f0] text-sm">
-              {inputText}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Assistant reply */}
-        {assistantText && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 max-w-md w-full"
-          >
-            <p className="text-xs text-[#64748b] mb-1">Ismi:</p>
-            <div className="rounded-xl bg-[#7c3aed]/10 border border-[#a78bfa]/20 px-4 py-3 text-[#e2e8f0] text-sm">
-              {assistantText}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Error */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mb-4 max-w-md w-full rounded-xl bg-red-500/10 border border-red-400/25 px-4 py-3 text-sm text-red-200"
-            >
-              {error}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Controls */}
-        <div className="flex items-center gap-4">
-          {/* Mic button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={toggleListening}
-            disabled={isGenerating}
-            className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all ${
-              isListening
-                ? 'bg-red-500/20 border-red-400 text-red-300'
-                : 'bg-white/10 border-white/30 text-white hover:bg-white/20'
-            }`}
-          >
-            {isListening ? (
-              <MicOff className="w-7 h-7" />
-            ) : (
-              <Mic className="w-7 h-7" />
-            )}
-          </motion.button>
-
-          {/* Generate/Send button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleGenerate}
-            disabled={isGenerating || !inputText.trim()}
-            className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all ${
-              isGenerating || !inputText.trim()
-                ? 'bg-white/5 border-white/10 text-gray-500 cursor-not-allowed'
-                : 'bg-[#7c3aed]/30 border-[#a78bfa]/40 text-[#a78bfa] hover:bg-[#7c3aed]/50'
-            }`}
-          >
-            {isGenerating ? (
-              <Loader2 className="w-7 h-7 animate-spin" />
-            ) : (
-              <Play className="w-7 h-7" />
-            )}
-          </motion.button>
-
-          {/* Play/Pause audio */}
-          {audioUrl && (
+      {/* Controls */}
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-[80px] z-30 flex items-center justify-center gap-4">
+        {callActive ? (
+          <>
+            {/* Mic ON/OFF */}
             <motion.button
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={togglePlayPause}
-              className="w-14 h-14 rounded-full flex items-center justify-center bg-white/10 border border-white/30 text-white hover:bg-white/20 transition-all"
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleMic}
+              disabled={isGenerating || audioStatus === 'playing'}
+
+              className={`flex items-center justify-center w-16 h-16 rounded-full border-2 transition-all ${
+                isListeningLocal
+                  ? 'bg-blue-500/15 border-blue-200/25 text-white'
+                  : 'bg-blue-500/15 border-blue-200/25 text-white hover:bg-blue-500/25'
+              } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-label={isListeningLocal ? 'Mic on' : 'Mic off'}
             >
-              {audioStatus === 'playing' ? (
-                <Pause className="w-6 h-6" />
+              {isListeningLocal ? (
+                <Mic className="w-6 h-6 text-white" />
               ) : (
-                <Play className="w-6 h-6" />
+                <MicOff className="w-6 h-6 text-white opacity-80" />
               )}
             </motion.button>
-          )}
 
-          {/* End call */}
+            {/* Stop AI (only while speaking) */}
+            {audioStatus === 'playing' ? (
+              <motion.button
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleMic}
+                className="flex items-center justify-center w-16 h-16 rounded-full border-2 transition-all bg-red-500/30 border-red-400/50 text-white"
+                aria-label="Stop AI"
+              >
+                <StopCircle className="w-6 h-6" />
+              </motion.button>
+            ) : null}
+
+            {/* End call */}
+            <motion.button
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleEndCall}
+              className="flex items-center justify-center w-16 h-16 rounded-full bg-red-500/30 border border-red-400/50 text-white hover:bg-red-500/40 transition-all"
+              aria-label="End call"
+            >
+              <PhoneOff className="w-6 h-6" />
+            </motion.button>
+          </>
+        ) : (
+          /* Initial state: single mic button */
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleEndCall}
-            className="w-14 h-14 rounded-full flex items-center justify-center bg-red-500/20 border border-red-400/40 text-red-300 hover:bg-red-500/30 transition-all"
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={startListeningSafe}
+            className="flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/15 border border-blue-200/25 backdrop-blur-xl text-white hover:bg-blue-500/25 transition-all"
+            aria-label="Start voice call"
           >
-            <PhoneOff className="w-6 h-6" />
+            <Mic className="w-6 h-6 text-white" />
           </motion.button>
-        </div>
-
-        {/* Voice not supported hint */}
-        {!isSupported && (
-          <p className="mt-4 text-xs text-[#64748b]">
-            Voice input not supported — type below instead
-          </p>
         )}
-
-        {/* Text input fallback */}
-        <div className="mt-6 max-w-md w-full">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Or type your message..."
-            disabled={isGenerating}
-            className="w-full rounded-xl bg-white/5 border border-blue-200/15 outline-none text-[#e2e8f0] p-4 text-sm placeholder:text-[#64748b] resize-none"
-            rows={2}
-          />
-        </div>
       </div>
     </div>
   );

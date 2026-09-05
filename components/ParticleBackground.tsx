@@ -51,11 +51,11 @@ const BLOOM_FRAG = `
   }
 `;
 
-// Count per variant — always modest to keep CPU light
+// Count per variant
 const COUNTS: Record<ParticleVariant, number> = {
   dna: 6000,
   galaxy: 8000,
-  bloom: 7000,
+  bloom: 20000, // user-provided swarm bloom
   fabric: 6000,
   neural: 6000,
 };
@@ -81,14 +81,17 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
 
     // SETUP
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(fogColor);
-    scene.fog = isNeural ? new THREE.FogExp2(fogColor, 0.008) : new THREE.FogExp2(fogColor, 0.012);
+    scene.background = new THREE.Color(isBloom ? 0x000000 : fogColor);
+    scene.fog = isNeural ? new THREE.FogExp2(fogColor, 0.008) : new THREE.FogExp2(fogColor, isBloom ? 0.01 : 0.012);
 
     const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 2000);
     camera.position.set(0, 0, isNeural ? 55 : 100);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: isBloom ? 'high-performance' : 'low-power',
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(w, h);
     mount.appendChild(renderer.domElement);
@@ -97,7 +100,7 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 0.85);
-    bloomPass.strength = isDna ? 0.8 : isNeural ? 0.9 : isFabric ? 1.4 : isBloom ? 0.7 : BLOOM_STRENGTH;
+    bloomPass.strength = isDna ? 0.8 : isNeural ? 0.9 : isFabric ? 1.4 : isBloom ? 1.0 : BLOOM_STRENGTH;
     bloomPass.radius = 0.4;
     bloomPass.threshold = 0;
     composer.addPass(bloomPass);
@@ -147,7 +150,7 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
 
     // Params
     const PARAMS: Record<string, number> = isBloom
-      ? { scale: 1, speed: 0.9, depth: 12, glow: 0.46 }
+      ? { scale: 0.84, speed: 0.65, depth: 8.4, glow: 0.28 }
       : isFabric
       ? { scale: 128, freq: 2.2, amp: 12.8, speed: 0.96, pull: 9, twist: 5.88 }
       : isDna
@@ -182,8 +185,8 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
           const time = t * speed;
           const randU = (Math.sin(i * 12.9898) * 43758.5453) % 1.0;
           const randV = (Math.sin(i * 78.233) * 12345.6789) % 1.0;
-          let x = (randU * 2.0 - 1.0) * scale;
-          let y = (randV * 2.0 - 1.0) * scale;
+          const x = (randU * 2.0 - 1.0) * scale;
+          const y = (randV * 2.0 - 1.0) * scale;
           const wave = Math.sin(x * 0.02 * freq + time) + Math.sin(y * 0.02 * freq - time * 0.8);
           let z = wave * amp;
           const w1x = Math.sin(time * 0.3) * scale * 0.4, w1y = Math.cos(time * 0.2) * scale * 0.4;
@@ -197,16 +200,20 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
           color.setHSL((0.6 - depth * 0.5 + 0.1 * Math.sin(time)) % 1.0, 0.7 + 0.3 * depth, 0.2 + 0.6 * (1.0 - depth));
         } else if (isBloom) {
           const scale = PARAMS.scale, speed = PARAMS.speed, depth = PARAMS.depth, glow = PARAMS.glow;
-          const time = t * speed;
+          const t2 = t * speed;
           const y = (i / count) * 42.55;
           const n = (10000.0 / count) * i;
-          const k = (4.0 + Math.cos(n / 9.0 - time * 2.0)) * Math.cos(n / 35.0);
+          const k = (4.0 + Math.cos(n / 9.0 - t2 * 2.0)) * Math.cos(n / 35.0);
           const e = y / 7.0 - 13.0;
-          const d = Math.sqrt(k * k + e * e) + Math.sin(e / 9.0 + time / 2.0) - 4.0;
-          const q = 2.0 * Math.sin(k * 3.0) - (y / 35.0) * k * (9.0 + k * Math.sin(Math.cos(e) * 9.0 - d * 2.0 + time));
-          const c = d - time;
-          target.set((q + 40.0 * Math.cos(c)) * scale, -((q * Math.sin(c) + d * 35.0) - 245.0) * scale, depth * Math.sin(k * 2.0 + c) * scale);
-          const hueDeg = (((d * 40.0 + time * 30.0) % 360.0) + 360.0) % 360.0;
+          const d = Math.sqrt(k * k + e * e) + Math.sin(e / 9.0 + t2 / 2.0) - 4.0;
+          const q = 2.0 * Math.sin(k * 3.0) - (y / 35.0) * k * (9.0 + k * Math.sin(Math.cos(e) * 9.0 - d * 2.0 + t2));
+          const c = d - t2;
+          target.set(
+            (q + 40.0 * Math.cos(c)) * scale,
+            -((q * Math.sin(c) + d * 35.0) - 245.0) * scale,
+            depth * Math.sin(k * 2.0 + c) * scale
+          );
+          const hueDeg = (((d * 40.0 + t2 * 30.0) % 360.0) + 360.0) % 360.0;
           color.setHSL((Math.floor(hueDeg / 10.0) * 10.0 + 5.0) / 360.0, 0.85, glow);
         } else if (isDna) {
           const twist = PARAMS.twist, radius = PARAMS.radius, flux = PARAMS.flux, zoom = PARAMS.zoom;

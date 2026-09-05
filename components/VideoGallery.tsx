@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Clapperboard, Play, Sparkles } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Clapperboard, Play } from 'lucide-react';
 
 interface VideoGalleryProps {
   isOpen: boolean;
@@ -136,12 +136,6 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
             Edits
           </span>
         </h2>
-        <motion.div
-          animate={{ rotate: [0, -10, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity, repeatDelay: 1.2 }}
-        >
-          <Sparkles className="w-6 h-6 text-[#c084fc]" />
-        </motion.div>
       </motion.div>
 
       {/* Close button */}

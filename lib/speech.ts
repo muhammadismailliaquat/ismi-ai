@@ -56,6 +56,7 @@ declare global {
 
 interface UseSpeechRecognitionProps {
   onResult?: (transcript: string) => void;
+  onInterimResult?: (transcript: string) => void;
   onError?: (error: string) => void;
   onEnd?: () => void;
   continuous?: boolean;
@@ -64,6 +65,7 @@ interface UseSpeechRecognitionProps {
 
 export function useSpeechRecognition({
   onResult,
+  onInterimResult,
   onError,
   onEnd,
   continuous = false,
@@ -83,12 +85,13 @@ export function useSpeechRecognition({
 
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           const results = Array.from(event.results);
-          const transcript = results
-            .map(result => result[0].transcript)
-            .join('');
+          const transcript = results.map((result) => result[0].transcript).join('');
+          const last = event.results[event.results.length - 1];
 
-          if (event.results[event.results.length - 1].isFinal) {
+          if (last?.isFinal) {
             onResult?.(transcript);
+          } else {
+            onInterimResult?.(transcript);
           }
         };
 
@@ -111,20 +114,26 @@ export function useSpeechRecognition({
     };
   }, [continuous, language, onResult, onError, onEnd]);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((): boolean => {
     if (recognitionRef.current && !isListeningRef.current) {
       try {
         recognitionRef.current.start();
         isListeningRef.current = true;
+        return true;
       } catch (error) {
         console.error('Speech recognition error:', error);
+        isListeningRef.current = false;
+        return false;
       }
     }
+    return false;
   }, []);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListeningRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch {}
       isListeningRef.current = false;
     }
   }, []);
@@ -135,7 +144,6 @@ export function useSpeechRecognition({
   return {
     startListening,
     stopListening,
-    isListening: isListeningRef.current,
     isSupported,
   };
 }

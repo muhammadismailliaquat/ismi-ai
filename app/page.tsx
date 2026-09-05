@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { MessageSquare, Sparkles, Zap, Phone, Globe } from 'lucide-react';
+import { MessageSquare, Zap, Phone, Globe } from 'lucide-react';
 import { ParticleBackground } from '@/components/ParticleBackground';
 
 export default function Home() {
@@ -37,9 +37,6 @@ export default function Home() {
           transition={{ delay: 0.2 }}
           className="mb-8 inline-flex items-center gap-3"
         >
-          <div className="w-16 h-16 rounded-2xl bg-[#7c3aed] flex items-center justify-center shadow-sm">
-            <Sparkles className="w-8 h-8 text-white" />
-          </div>
           <h1 className="text-6xl font-bold text-white drop-shadow">ismi.ai</h1>
         </motion.div>
 

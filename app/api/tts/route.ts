@@ -70,8 +70,9 @@ export async function GET(request: NextRequest) {
   const text = (request.nextUrl.searchParams.get("text") || "").trim();
   const rawVoice = request.nextUrl.searchParams.get("voice") || "en-US-AndrewNeural";
   const rawRate = request.nextUrl.searchParams.get("rate");
+  const rawPitch = request.nextUrl.searchParams.get("pitch");
 
-  // ── 5. Validate & sanitize inputs ───────────────────────────────────────
+  // ── 5. Validate & sanitize inputs ───────────────────────────────────────────────
   if (!text) {
     return jsonError("No text provided", 400);
   }
@@ -82,6 +83,14 @@ export async function GET(request: NextRequest) {
   // Rate: must be numeric, clamp to [0.5, 2.0]
   const rawRateNum = rawRate && !isNaN(Number(rawRate)) ? Number(rawRate) : 1;
   const rate = Math.min(2.0, Math.max(0.5, rawRateNum));
+
+  // Pitch: optional relative percentage (e.g. "+20%" / "-20%")
+  // Keep validation strict to avoid SSML/prosody injection.
+  const pitchQuery = rawPitch ? rawPitch.trim() : "";
+  const pitch =
+    pitchQuery && /^[-+]?\d+(?:\.\d+)?%$/.test(pitchQuery)
+      ? pitchQuery
+      : undefined;
 
   // Text cap — safety cutoff to prevent abuse
   const safeText =
@@ -94,7 +103,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const { audioStream } = tts.toStream(safeText, { rate });
+    const { audioStream } = tts.toStream(safeText, pitch ? { rate, pitch } : { rate });
 
     const chunks: Uint8Array[] = [];
     for await (const chunk of audioStream) {
