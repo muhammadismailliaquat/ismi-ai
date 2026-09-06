@@ -77,7 +77,7 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
       )}
 
       {messages.map((message, index) => {
-        const isStreaming = isLoading && index === messages.length - 1;
+        const isStreaming = isLoading && message.role === 'assistant' && index === messages.length - 1;
         return (
           <MessageBubble
             key={message.id}

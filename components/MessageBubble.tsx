@@ -104,12 +104,17 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}
     >
       <div
-        className={`relative max-w-[80%] rounded-2xl px-4 pt-3 pb-2 backdrop-blur-[2px] text-[#e2e8f0] group ${
+        className={`relative max-w-[80%] rounded-2xl text-[#e2e8f0] group overflow-hidden ${
           isUser
-            ? 'bg-blue-400/15 border border-blue-200/30'
-            : 'bg-blue-500/10 border border-blue-200/20'
+            ? 'border border-blue-200/30'
+            : 'border border-blue-200/20'
         }`}
       >
+        <div
+          className={`${
+            isUser ? 'bg-blue-400/15' : 'bg-blue-500/10'
+          } px-4 pt-3 pb-2 backdrop-blur-[2px]`}
+        >
         <div className="prose prose-sm max-w-none prose-invert">
           <ReactMarkdown
             components={{
@@ -161,6 +166,7 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
             {content}
           </ReactMarkdown>
         </div>
+      </div>
 
         {/* Bottom action row: copy + speak buttons */}
         {!isStreaming && (
