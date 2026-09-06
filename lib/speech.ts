@@ -84,6 +84,9 @@ export function useSpeechRecognition({
         recognitionRef.current.lang = language;
 
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+          // Ignore any late results after stop/abort so they don't overwrite UI state.
+          if (!isListeningRef.current) return;
+
           const results = Array.from(event.results);
           const transcript = results.map((result) => result[0].transcript).join('');
           const last = event.results[event.results.length - 1];
@@ -96,12 +99,17 @@ export function useSpeechRecognition({
         };
 
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+          // Prevent stale errors after stop/abort from triggering restarts.
+          if (!isListeningRef.current) return;
           onError?.(event.error);
           isListeningRef.current = false;
         };
 
         recognitionRef.current.onend = () => {
+          // Avoid calling onEnd if we already stopped/aborted.
+          const wasListening = isListeningRef.current;
           isListeningRef.current = false;
+          if (!wasListening) return;
           onEnd?.();
         };
       }

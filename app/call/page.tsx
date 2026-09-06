@@ -47,6 +47,9 @@ export default function CallPage() {
 
     if (next === 'listening') {
       restartSilenceCountRef.current = 0;
+      // Prevent old user question from reappearing after each turn.
+      setYouTranscript('');
+      setError(null);
     }
   }, []);
 
@@ -84,6 +87,19 @@ export default function CallPage() {
       }
       storage.setCurrentChatId(currentCallConversationIdRef.current);
       return;
+    }
+
+    // If the call was started from /chat, reuse the currently selected
+    // conversation so voice messages append to the same thread.
+    const existingChatId = storage.getCurrentChatId();
+    if (existingChatId) {
+      const existing = await storage.getConversation(existingChatId);
+      if (existing) {
+        currentCallConversationIdRef.current = existing.id;
+        currentCallConversationRef.current = existing;
+        storage.setCurrentChatId(existing.id);
+        return;
+      }
     }
 
     const convo = storage.createConversation('Voice Call Conversation');
@@ -145,37 +161,11 @@ export default function CallPage() {
     return 1;
   }, []);
 
-  const startListeningFnRef = useRef<null | (() => void)>(null);
-
-  const startListeningFromPhase = useCallback(() => {
-    // Only start when we are truly in listening phase.
-    if (phaseRef.current !== 'listening') return;
-    startListeningFnRef.current?.();
-  }, []);
-
-  const scheduleSilenceRestart = useCallback(
-    (delayMs: number = 200) => {
-      const seq = ++restartSeqRef.current;
-      const attempt = () => {
-        if (restartSeqRef.current !== seq) return;
-        if (phaseRef.current !== 'listening') return;
-
-        restartSilenceCountRef.current += 1;
-        if (restartSilenceCountRef.current > 6) {
-          // Give up and wait for user.
-          transitionTo('ready');
-          return;
-        }
-
-        startListeningFromPhase();
-      };
-
-      window.setTimeout(attempt, delayMs);
-    },
-    [startListeningFromPhase, transitionTo]
-  );
+  // Used by SpeechRecognition callbacks (no-speech / onEnd) to restart safely.
+  const scheduleSilenceRestartRef = useRef<(delayMs?: number) => void>(() => {});
 
   const { startListening, stopListening, isSupported } = useSpeechRecognition({
+
     onResult: (finalTranscript) => {
       const cleaned = (finalTranscript || '').trim();
 
@@ -199,7 +189,7 @@ export default function CallPage() {
     onError: (msg) => {
       if (msg === 'no-speech') {
         if (phaseRef.current === 'listening') {
-          scheduleSilenceRestart(200);
+          scheduleSilenceRestartRef.current(200);
         }
         return;
       }
@@ -210,7 +200,7 @@ export default function CallPage() {
     onEnd: () => {
       // Web Speech API often stops on silence.
       if (phaseRef.current === 'listening') {
-        scheduleSilenceRestart(200);
+        scheduleSilenceRestartRef.current(200);
         return;
       }
 
@@ -219,6 +209,37 @@ export default function CallPage() {
     continuous: false,
     language: 'en-US',
   });
+
+  const startListeningFromPhase = useCallback(() => {
+    if (phaseRef.current !== 'listening') return;
+    startListening();
+  }, [startListening]);
+
+  const scheduleSilenceRestart = useCallback(
+    (delayMs: number = 200) => {
+      const seq = ++restartSeqRef.current;
+      const attempt = () => {
+        if (restartSeqRef.current !== seq) return;
+        if (phaseRef.current !== 'listening') return;
+
+        restartSilenceCountRef.current += 1;
+        if (restartSilenceCountRef.current > 6) {
+          transitionTo('ready');
+          return;
+        }
+
+        startListeningFromPhase();
+      };
+
+      window.setTimeout(attempt, delayMs);
+    },
+    [startListeningFromPhase, transitionTo]
+  );
+
+  // Keep the ref updated so callbacks always use the latest function.
+  useEffect(() => {
+    scheduleSilenceRestartRef.current = scheduleSilenceRestart;
+  }, [scheduleSilenceRestart]);
 
   const parseChatStream = useCallback(async (response: Response): Promise<ChatStreamResult> => {
     if (!response.ok) {
@@ -388,7 +409,10 @@ export default function CallPage() {
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-voice-mode': 'true',
+          },
           body: JSON.stringify({
             messages: [{ role: 'user', content: cleaned }],
           }),

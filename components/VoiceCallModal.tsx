@@ -307,7 +307,10 @@ export function VoiceCallModal({
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-voice-mode": "true",
+          },
           body: JSON.stringify({
             messages: [{ role: "user", content: cleaned }],
           }),
