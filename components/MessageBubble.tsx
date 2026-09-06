@@ -115,7 +115,7 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
             isUser ? 'bg-blue-400/15' : 'bg-blue-500/10'
           } px-4 pt-3 pb-2 backdrop-blur-[2px]`}
         >
-        <div className="prose prose-sm max-w-none prose-invert">
+        <div className="prose prose-sm max-w-none prose-invert pl-10 pr-4">
           <ReactMarkdown
             components={{
               code({ node, inline, className, children, ...props }: any) {
