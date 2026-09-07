@@ -266,7 +266,9 @@ export default function ChatPage() {
          *
          * Now we send the role exactly as the backend expects.
          */
-        const apiMessages = [
+        // Backend request schema caps messages array length (max 30).
+        // Prevents Zod error like: "Too big: expected array to have ≤30 items".
+        const apiMessagesFull = [
           ...currentConversation.messages,
           userMessage,
         ].map((message) => {
@@ -286,6 +288,8 @@ export default function ChatPage() {
             content: message.content,
           };
         });
+
+        const apiMessages = apiMessagesFull.slice(-30);
 
         const response = await fetch('/api/chat', {
           method: 'POST',
