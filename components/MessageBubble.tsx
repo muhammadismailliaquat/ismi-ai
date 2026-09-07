@@ -30,10 +30,9 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Keep the callback lightweight; if we need to trigger UI later,
+        // Keep the callback lightweight; if we need UI later,
         // do it here without creating a new observer each render.
         codeVisibleRef.current = entry.isIntersecting;
-        // If later you need UI changes based on visibility, you can set state here.
         // For now we keep it leak-free and rerender-free.
       },
       { threshold: 0 }
@@ -103,74 +102,84 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
       transition={{ duration: 0.35, ease: 'easeOut' }}
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}
     >
-      <div
-        className={`relative max-w-[80%] rounded-2xl text-[#e2e8f0] group overflow-hidden ${
-          isUser
-            ? 'border border-blue-200/30'
-            : 'border border-blue-200/20'
-        }`}
-      >
+      {/*
+        Layout fix:
+        - Bubble background wraps ONLY the message text.
+        - Copy/speak buttons are rendered OUTSIDE the background and anchored
+          at the bottom-right of the message (below the bubble).
+      */}
+      <div className="max-w-[80%] flex flex-col">
         <div
-          className={`${
-            isUser ? 'bg-blue-400/15' : 'bg-blue-500/10'
-          } px-4 pt-3 pb-2 backdrop-blur-[2px]`}
+          className={`relative rounded-2xl px-4 pt-3 pb-2 backdrop-blur-[2px] text-[#e2e8f0] ${
+            isUser
+              ? 'bg-blue-400/15 border border-blue-200/30'
+              : 'bg-blue-500/10 border border-blue-200/20'
+          }`}
         >
-        <div className="prose prose-sm max-w-none prose-invert pl-10 pr-4">
-          <ReactMarkdown
-            components={{
-              code({ node, inline, className, children, ...props }: any) {
-                const match = /language-(\w+)/.exec(className || '');
-                const code = String(children).replace(/\n$/, '');
+          <div className="prose prose-sm max-w-none prose-invert">
+            <ReactMarkdown
+              components={{
+                code({ node, inline, className, children, ...props }: any) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const code = String(children).replace(/\n$/, '');
 
-                if (!inline && match) {
+                  if (!inline && match) {
+                    return (
+                      <div id={codeId} className="relative group/code">
+                        <button
+                          onClick={() => handleCodeCopy(code)}
+                          className="absolute top-2 right-2 p-1.5 rounded-md bg-[#7c3aed]/80 backdrop-blur-sm border border-[#a78bfa]/40 text-white hover:bg-[#7c3aed] transition-all opacity-0 group-hover/code:opacity-100 z-10 shadow-lg"
+                          aria-label="Copy code"
+                          title="Copy code"
+                        >
+                          {codeCopied ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        <SyntaxHighlighter
+                          style={vscDarkPlus}
+                          language={match[1]}
+                          PreTag="div"
+                          className="rounded-lg text-sm overflow-x-auto"
+                          {...props}
+                        >
+                          {code}
+                        </SyntaxHighlighter>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div id={codeId} className="relative group/code">
-                      <button
-                        onClick={() => handleCodeCopy(code)}
-                        className="absolute top-2 right-2 p-1.5 rounded-md bg-[#7c3aed]/80 backdrop-blur-sm border border-[#a78bfa]/40 text-white hover:bg-[#7c3aed] transition-all opacity-0 group-hover/code:opacity-100 z-10 shadow-lg"
-                        aria-label="Copy code"
-                        title="Copy code"
-                      >
-                        {codeCopied ? (
-                          <Check className="w-4 h-4 text-green-400" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
-
-                      <SyntaxHighlighter
-                        style={vscDarkPlus}
-                        language={match[1]}
-                        PreTag="div"
-                        className="rounded-lg text-sm overflow-x-auto"
-                        {...props}
-                      >
-                        {code}
-                      </SyntaxHighlighter>
-                    </div>
+                    <code className={`${className} bg-white/10 rounded px-1 py-0.5`} {...props}>
+                      {children}
+                    </code>
                   );
-                }
+                },
+                p: ({ children }: any) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }: any) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                ol: ({ children }: any) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                li: ({ children }: any) => <li className="mb-1">{children}</li>,
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
 
-                return (
-                  <code className={`${className} bg-white/10 rounded px-1 py-0.5`} {...props}>
-                    {children}
-                  </code>
-                );
-              },
-              p: ({ children }: any) => <p className="mb-2 last:mb-0">{children}</p>,
-              ul: ({ children }: any) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
-              ol: ({ children }: any) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
-              li: ({ children }: any) => <li className="mb-1">{children}</li>,
-            }}
-          >
-            {content}
-          </ReactMarkdown>
+          {isStreaming && (
+            <motion.span
+              className="inline-block w-2 h-4 ml-1 bg-current"
+              animate={{ opacity: [1, 0] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+            />
+          )}
         </div>
-      </div>
 
-        {/* Bottom action row: copy + speak buttons */}
+        {/* Bottom action row: copy + speak buttons (outside bubble background) */}
         {!isStreaming && (
-          <div className="flex items-center justify-end gap-1 mt-2 pt-1 border-t border-white/5">
+          <div className="w-full flex items-center justify-end gap-1 mt-1">
             {/* Speak button — AI messages only */}
             {!isUser && (
               <button
@@ -201,14 +210,6 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
               )}
             </button>
           </div>
-        )}
-
-        {isStreaming && (
-          <motion.span
-            className="inline-block w-2 h-4 ml-1 bg-current"
-            animate={{ opacity: [1, 0] }}
-            transition={{ duration: 0.8, repeat: Infinity }}
-          />
         )}
       </div>
     </motion.div>
