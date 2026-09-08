@@ -18,7 +18,7 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 min-w-0 overflow-y-auto p-4 md:p-6">
       {messages.length === 0 && !isLoading && (
         <div className="h-full flex items-center justify-center">
           <div className="text-center max-w-md">

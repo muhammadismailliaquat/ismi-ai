@@ -29,6 +29,8 @@ export default function CallPage() {
   const [youTranscript, setYouTranscript] = useState('');
   const [assistantText, setAssistantText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSearchingWeb, setIsSearchingWeb] = useState(false);
+
 
   // Single source of truth for call controls.
   const [phase, setPhase] = useState<Phase>('precall');
@@ -242,6 +244,8 @@ export default function CallPage() {
   }, [scheduleSilenceRestart]);
 
   const parseChatStream = useCallback(async (response: Response): Promise<ChatStreamResult> => {
+    // Reset searching indicator for each new response
+    setIsSearchingWeb(false);
     if (!response.ok) {
       if (response.status === 401) return jsonError('Unauthorized', 401);
       try {
@@ -275,6 +279,7 @@ export default function CallPage() {
           const data = line.slice(6).trim();
 
           if (data === '[DONE]') {
+            setIsSearchingWeb(false);
             return { ok: true as const, text: assistant };
           }
 
@@ -283,6 +288,11 @@ export default function CallPage() {
             if (parsed?.error) {
               return jsonError(String(parsed.error), 500);
             }
+
+            if (typeof parsed?.searching === 'boolean') {
+              setIsSearchingWeb(parsed.searching);
+            }
+
             if (typeof parsed?.text === 'string') {
               assistant += parsed.text;
               setAssistantText(stripMarkdown(assistant));
@@ -296,6 +306,14 @@ export default function CallPage() {
 
     return { ok: true as const, text: assistant };
   }, [stripMarkdown]);
+
+  // If we exit parsing early due to errors/finish, make sure searching indicator isn't stuck.
+  useEffect(() => {
+    if (!isGenerating) {
+      setIsSearchingWeb(false);
+    }
+  }, [isGenerating]);
+
 
   const fetchTtsAndPrepareAudio = useCallback(
     async (text: string) => {
@@ -576,7 +594,7 @@ export default function CallPage() {
       <ParticleBackground variant="bloom" />
 
       {/* Persistent status box at top */}
-      <div className="absolute top-[120px] left-1/2 -translate-x-1/2 z-20 inline-flex w-auto max-w-2xl px-4 flex-col">
+      <div className="absolute top-[clamp(200px,30vh,260px)] md:top-[clamp(200px,25vh,260px)] left-1/2 -translate-x-1/2 z-20 inline-flex w-auto max-w-2xl px-3 md:px-4 flex-col">
         <div className="rounded-2xl backdrop-blur-xl bg-blue-500/20 border border-blue-200/25 shadow-[0_10px_40px_rgba(0,0,0,0.35)] overflow-hidden flex flex-col">
 
           {/* Main status label */}
@@ -586,10 +604,12 @@ export default function CallPage() {
               : isListeningLocal
                 ? 'Listening'
                 : isGenerating
-                  ? 'Thinking'
-                  : audioStatus === 'playing'
-                    ? 'Speaking'
-                    : 'Tap mic to start'}
+                  ? (isSearchingWeb ? 'Searching the web...' : 'Thinking')
+                  : isSearchingWeb
+                    ? 'Searching the web...'
+                    : audioStatus === 'playing'
+                      ? 'Speaking'
+                      : 'Tap mic to start'}
           </div>
 
           {/* Inner transcript box — shows user speech while speaking */}
@@ -619,7 +639,7 @@ export default function CallPage() {
 
       {/* Error display */}
       {error ? (
-        <div className="absolute top-[340px] left-1/2 -translate-x-1/2 z-30 w-full max-w-2xl px-4">
+        <div className="absolute top-[300px] left-1/2 -translate-x-1/2 z-30 w-full max-w-2xl px-4">
           <div className="rounded-xl bg-red-500/20 border border-red-400/30 px-4 py-2 text-sm text-red-200 text-center">
             {error}
           </div>
@@ -631,7 +651,7 @@ export default function CallPage() {
       </div>
 
       {/* Controls */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-[80px] z-30 flex items-center justify-center gap-4">
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-[70px] md:bottom-[80px] z-30 flex items-center justify-center gap-3">
         {callActive ? (
           <>
             {/* Mic ON/OFF */}
@@ -641,7 +661,7 @@ export default function CallPage() {
               onClick={handleMic}
               disabled={isGenerating || audioStatus === 'playing'}
 
-              className={`flex items-center justify-center w-16 h-16 rounded-full border-2 transition-all ${
+              className={`flex items-center justify-center w-16 h-16 md:w-16 md:h-16 rounded-full border-2 transition-all ${
                 isListeningLocal
                   ? 'bg-blue-500/15 border-blue-200/25 text-white'
                   : 'bg-blue-500/15 border-blue-200/25 text-white hover:bg-blue-500/25'
@@ -661,7 +681,7 @@ export default function CallPage() {
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleMic}
-                className="flex items-center justify-center w-16 h-16 rounded-full border-2 transition-all bg-red-500/30 border-red-400/50 text-white"
+                className="flex items-center justify-center w-16 h-16 md:w-16 md:h-16 rounded-full border-2 transition-all bg-red-500/30 border-red-400/50 text-white"
                 aria-label="Stop AI"
               >
                 <StopCircle className="w-6 h-6" />

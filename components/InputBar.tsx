@@ -63,7 +63,7 @@ export function InputBar({
   };
 
   return (
-    <div className="rounded-2xl p-4 bg-blue-500/5 border border-blue-200/15 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+    <div className="rounded-2xl p-3 md:p-4 bg-blue-500/5 border border-blue-200/15 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
       <div className="flex items-end gap-3">
         <textarea
           ref={textareaRef}

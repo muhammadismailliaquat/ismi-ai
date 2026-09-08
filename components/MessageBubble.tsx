@@ -100,7 +100,7 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
       initial={{ opacity: 0, y: 16, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}
+      className={`flex min-w-0 ${isUser ? 'justify-end' : 'justify-start'} mb-4`}
     >
       {/*
         Layout fix:
@@ -108,15 +108,15 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
         - Copy/speak buttons are rendered OUTSIDE the background and anchored
           at the bottom-right of the message (below the bubble).
       */}
-      <div className="max-w-[80%] flex flex-col">
+      <div className={`${isUser ? 'self-end' : 'self-start'} inline-flex min-w-0 max-w-[85%] md:max-w-[80%] flex-col`}>
         <div
-          className={`relative rounded-2xl px-4 pt-3 pb-2 backdrop-blur-[2px] text-[#e2e8f0] ${
+          className={`relative w-full min-w-0 rounded-2xl px-4 pt-3 pb-2 backdrop-blur-[2px] text-[#e2e8f0] ${
             isUser
               ? 'bg-blue-400/15 border border-blue-200/30'
               : 'bg-blue-500/10 border border-blue-200/20'
           }`}
         >
-          <div className="prose prose-sm max-w-none prose-invert">
+          <div className="prose prose-sm max-w-none prose-invert break-words w-full">
             <ReactMarkdown
               components={{
                 code({ node, inline, className, children, ...props }: any) {
@@ -179,7 +179,7 @@ export const MessageBubble = memo(function MessageBubble({ role, content, isStre
 
         {/* Bottom action row: copy + speak buttons (outside bubble background) */}
         {!isStreaming && (
-          <div className="w-full flex items-center justify-end gap-1 mt-1">
+          <div className="flex items-center justify-end gap-1 mt-1">
             {/* Speak button — AI messages only */}
             {!isUser && (
               <button

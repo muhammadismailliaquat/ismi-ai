@@ -73,11 +73,30 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
     const isDna = variant === 'dna';
     const isNeural = variant === 'neural';
     const count = COUNTS[variant];
-    const speedMult = isFabric ? 0.4 : 1;
+    // Slow down DNA/chat particles a bit so it doesn't feel fast on small screens.
+    // (Call page uses variant="bloom" so it stays unchanged.)
+    const speedMult = isFabric ? 0.4 : isDna ? 0.65 : 1;
     const fogColor = isDna || isNeural ? 0x000000 : isFabric ? 0x0f172a : FOG_COLOR;
 
-    const w = mount.clientWidth || window.innerWidth;
-    const h = mount.clientHeight || window.innerHeight;
+    const getViewportSize = () => {
+      // Use visualViewport when available (mobile browser address bar changes size).
+      const vv = window.visualViewport;
+      const w = vv?.width ?? window.innerWidth;
+      const h = vv?.height ?? window.innerHeight;
+      return { w, h };
+    };
+
+    const { w, h } = getViewportSize();
+
+    const computeViewScale = (width: number) => {
+      // On very narrow phones we want the orb/particle field to “fit” like the call page.
+      // This avoids sparse right-side coverage.
+      // Width-based scale tuned so the dna field looks denser-but-smaller
+      // on ~300px phones (matches the “call page” look expectation).
+      return Math.min(1, Math.max(0.25, width / 720));
+    };
+
+    let viewScale = isDna ? computeViewScale(w) : 1;
 
     // SETUP
     const scene = new THREE.Scene();
@@ -281,6 +300,12 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
           color.setHSL(h - Math.floor(h), 0.9, l);
         }
 
+        // Apply responsive scaling so the particle field fits small screens better.
+        // We scale mainly in the screen plane (x/y). Keeping z unscaled helps
+        // preserve depth/bloom feel while still fixing narrow-width coverage.
+        target.x *= viewScale;
+        target.y *= viewScale;
+
         positions[i].lerp(target, 0.1);
         dummy.position.copy(positions[i]);
         dummy.updateMatrix();
@@ -302,16 +327,26 @@ export const ParticleBackground = memo(function ParticleBackground({ variant = '
     function onResize() {
       const nw = el.clientWidth || window.innerWidth;
       const nh = el.clientHeight || window.innerHeight;
+      viewScale = isDna ? computeViewScale(nw) : 1;
       camera.aspect = nw / nh;
       camera.updateProjectionMatrix();
       renderer.setSize(nw, nh);
       composer.setSize(nw, nh);
+      // Keep bloom pass resolution in sync with composer render targets.
+      (bloomPass as any)?.setSize?.(nw, nh);
     }
+    // ResizeObserver: handles mobile visual-viewport changes (address bar) better than window resize alone.
+    const ro = new ResizeObserver(() => onResize());
+    ro.observe(el);
+
     window.addEventListener('resize', onResize);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      try {
+        ro.disconnect();
+      } catch {}
       if (controls) { try { controls.dispose(); } catch {} }
       try { (composer as any).dispose?.(); } catch {}
       renderer.dispose();

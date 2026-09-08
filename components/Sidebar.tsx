@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, MessageSquare, Trash2, Edit2, Clapperboard } from 'lucide-react';
 import { ChatConversation } from '@/types/chat';
 import { useState } from 'react';
-import { VideoGallery } from './VideoGallery';
 
 interface SidebarProps {
   conversations: ChatConversation[];
@@ -13,6 +12,7 @@ interface SidebarProps {
   onNewChat: () => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, newTitle: string) => void;
+  onShowVideos?: () => void;
 }
 
 export function Sidebar({
@@ -22,10 +22,10 @@ export function Sidebar({
   onNewChat,
   onDeleteConversation,
   onRenameConversation,
+  onShowVideos,
 }: SidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [showVideos, setShowVideos] = useState(false);
 
   const startEdit = (id: string, currentTitle: string) => {
     setEditingId(id);
@@ -41,22 +41,22 @@ export function Sidebar({
   };
 
   return (
-    <div className="w-80 h-full border-r border-blue-200/15 bg-blue-500/5 flex flex-col">
+    <div className="w-80 max-w-[85vw] md:max-w-none h-full border-r border-blue-200/15 bg-blue-500/5 flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-blue-200/20">
+      <div className="p-3 md:p-4 max-[360px]:p-2 border-b border-blue-200/20">
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#7c3aed]/55 backdrop-blur-[2px] border border-[#a78bfa]/40 hover:bg-[#7c3aed]/70 text-white font-semibold shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 md:px-4 md:py-3 max-[360px]:gap-1 max-[360px]:px-2 max-[360px]:py-2 rounded-xl bg-[#7c3aed]/55 backdrop-blur-[2px] border border-[#a78bfa]/40 hover:bg-[#7c3aed]/70 text-white font-semibold shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 max-[360px]:w-4 max-[360px]:h-4" />
           New Chat
         </motion.button>
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto p-2 md:p-3">
         <AnimatePresence>
           {conversations.map((conversation) => (
             <motion.div
@@ -64,7 +64,7 @@ export function Sidebar({
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className={`group relative mb-2 rounded-xl p-3 cursor-pointer transition-all border ${
+              className={`group relative mb-2 max-[360px]:mb-1 rounded-xl p-2 md:p-3 cursor-pointer transition-all border ${
                 currentConversationId === conversation.id
                   ? 'bg-blue-400/15 border-blue-200/25 shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
                   : 'border-transparent hover:bg-blue-500/10 hover:border-blue-200/15'
@@ -72,7 +72,7 @@ export function Sidebar({
               onClick={() => onSelectConversation(conversation.id)}
             >
               <div className="flex items-start gap-3">
-                <MessageSquare className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#a78bfa]" />
+                <MessageSquare className="w-5 h-5 mt-0.5 flex-shrink-0 max-[360px]:w-4 max-[360px]:h-4 text-[#a78bfa]" />
                 <div className="flex-1 min-w-0">
                   {editingId === conversation.id ? (
                     <input
@@ -141,15 +141,13 @@ export function Sidebar({
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => setShowVideos(true)}
+          onClick={onShowVideos}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#7c3aed]/55 backdrop-blur-[2px] border border-[#a78bfa]/40 hover:bg-[#7c3aed]/70 text-white font-semibold transition-all"
         >
           <Clapperboard className="w-5 h-5" />
           Have Fun with Edits
         </motion.button>
       </div>
-
-      <VideoGallery isOpen={showVideos} onClose={() => setShowVideos(false)} />
     </div>
   );
 }

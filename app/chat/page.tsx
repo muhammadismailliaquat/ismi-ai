@@ -13,8 +13,9 @@ import {
 import { storage } from '@/lib/storage';
 import { ChatConversation, ChatMessage } from '@/types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import Link from 'next/link';
+import { VideoGallery } from '@/components/VideoGallery';
 
 export default function ChatPage() {
   const { data: session, update } = useSession();
@@ -24,6 +25,8 @@ export default function ChatPage() {
     useState<ChatConversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showVideos, setShowVideos] = useState(false);
 
   const router = useRouter();
 
@@ -129,6 +132,9 @@ export default function ChatPage() {
     if (convo) {
       setCurrentConversation(convo);
       storage.setCurrentChatId(id);
+
+      // Mobile: close the sidebar drawer after selecting a conversation.
+      setIsSidebarOpen(false);
     }
   };
 
@@ -494,6 +500,18 @@ export default function ChatPage() {
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between p-4 border-b border-blue-200/15 bg-blue-500/5">
+        {/* Mobile: hamburger */}
+        <button
+          type="button"
+          onClick={() => setIsSidebarOpen(true)}
+          className="md:hidden p-2 rounded-xl border border-blue-200/25 bg-blue-500/10 backdrop-blur-[2px] text-white"
+          aria-label="Open chat history"
+        >
+          <span className="block w-5 h-[2px] bg-white/80 rounded mb-1" />
+          <span className="block w-5 h-[2px] bg-white/80 rounded mb-1" />
+          <span className="block w-5 h-[2px] bg-white/80 rounded" />
+        </button>
+
         <Link
           href="/"
           className="text-xl font-bold text-white drop-shadow"
@@ -515,19 +533,64 @@ export default function ChatPage() {
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 flex-1 flex overflow-hidden">
-        <Sidebar
-          conversations={conversations}
-          currentConversationId={
-            currentConversation?.id || null
-          }
-          onSelectConversation={handleSelectConversation}
-          onNewChat={createNewChat}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-        />
+      <div className="relative z-10 flex-1 min-w-0 flex overflow-hidden">
+        <div className="hidden md:flex">
+          <Sidebar
+            conversations={conversations}
+            currentConversationId={
+              currentConversation?.id || null
+            }
+            onSelectConversation={handleSelectConversation}
+            onNewChat={createNewChat}
+            onDeleteConversation={handleDeleteConversation}
+            onRenameConversation={handleRenameConversation}
+            onShowVideos={() => setShowVideos(true)}
+          />
+        </div>
 
-        <div className="flex-1 flex flex-col">
+        {/* Mobile overlay + drawer */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 z-50 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+              aria-hidden="true"
+            />
+
+            <div
+              className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-[#0f172a]/95 backdrop-blur-[2px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(false)}
+                className="absolute top-3 left-3 z-[60] p-2 rounded-xl border border-blue-200/25 bg-blue-500/10 backdrop-blur-[2px] text-white"
+                aria-label="Close chat history"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="h-full overflow-hidden pt-12">
+                <Sidebar
+                  conversations={conversations}
+                  currentConversationId={
+                    currentConversation?.id || null
+                  }
+                  onSelectConversation={handleSelectConversation}
+                  onNewChat={createNewChat}
+                  onDeleteConversation={handleDeleteConversation}
+                  onRenameConversation={handleRenameConversation}
+                  onShowVideos={() => setShowVideos(true)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0 flex flex-col">
           <ChatWindow
             messages={currentConversation?.messages || []}
             isLoading={isLoading}
@@ -557,7 +620,7 @@ export default function ChatPage() {
           </AnimatePresence>
 
           {/* Input */}
-          <div className="p-4 border-t border-blue-200/15 bg-blue-500/5">
+          <div className="p-3 md:p-4 border-t border-blue-200/15 bg-blue-500/5">
             <InputBar
               onSendMessage={handleSendMessage}
               disabled={isLoading}
@@ -565,6 +628,8 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+      {/* VideoGallery at root level — escapes sidebar drawer overflow */}
+      <VideoGallery isOpen={showVideos} onClose={() => setShowVideos(false)} />
     </div>
   );
 }

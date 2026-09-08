@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, ChevronRight, Clapperboard, Play } from 'lucide-react';
+import { X, Clapperboard, Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 
 interface VideoGalleryProps {
   isOpen: boolean;
@@ -86,7 +86,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 max-[360px]:p-0 max-[300px]:p-0 overflow-y-auto overflow-x-hidden"
       onMouseMove={handleMouseMove}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
@@ -122,7 +122,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10"
+        className="absolute top-6 max-[360px]:top-4 max-[300px]:top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 z-10"
       >
         <motion.div
           animate={{ rotate: [0, 10, -10, 0] }}
@@ -130,7 +130,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
         >
           <Clapperboard className="w-7 h-7 text-[#a78bfa]" />
         </motion.div>
-        <h2 className="text-2xl font-bold text-white">
+        <h2 className="text-2xl max-[360px]:text-xl max-[300px]:text-lg font-bold text-white">
           Video{' '}
           <span className="bg-gradient-to-r from-[#a78bfa] via-[#c084fc] to-[#7c3aed] bg-clip-text text-transparent">
             Edits
@@ -144,10 +144,10 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
         animate={{ opacity: showControls ? 1 : 0.3, scale: 1 }}
         transition={{ duration: 0.3 }}
         onClick={handleClose}
-        className="absolute top-4 right-4 z-20 p-3 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 hover:scale-110 transition-all"
+        className="absolute top-4 right-4 z-20 p-2 max-[360px]:p-1.5 max-[300px]:p-1 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 hover:scale-110 transition-all"
         aria-label="Close"
       >
-        <X className="w-6 h-6 text-white" />
+        <X className="w-5 h-5 max-[360px]:w-4 max-[360px]:h-4 max-[300px]:w-3.5 max-[300px]:h-3.5 text-white" />
       </motion.button>
 
       {/* Loading */}
@@ -185,24 +185,24 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
         </motion.div>
       )}
 
-      {/* Slider */}
+      {/* Slider — desktop arrows + mobile control bar */}
       {!loading && videos.length > 0 && (
-        <div className="relative w-full h-full flex items-center justify-center px-4">
-          {/* Prev arrow */}
+        <div className="relative w-full h-full flex items-center justify-center px-0 pt-24 pb-20 md:pt-28 md:pb-24">
+          {/* Desktop prev arrow — hidden on mobile */}
           <motion.button
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: showControls ? 1 : 0.2, x: 0 }}
             whileHover={{ scale: 1.15 }}
             whileTap={{ scale: 0.9 }}
             onClick={handlePrev}
-            className="absolute left-4 z-10 p-4 rounded-full bg-[#7c3aed]/30 backdrop-blur-md border border-[#a78bfa]/40 hover:bg-[#7c3aed]/50 transition-all group"
+            className="hidden absolute left-4 z-10 p-4 rounded-full bg-[#7c3aed]/30 backdrop-blur-md border border-[#a78bfa]/40 hover:bg-[#7c3aed]/50 transition-all group"
             aria-label="Previous"
           >
             <motion.div
               whileHover={{ x: -3 }}
               transition={{ type: 'spring', stiffness: 300 }}
             >
-              <ChevronLeft className="w-10 h-10 text-white" />
+              <SkipBack className="w-10 h-10 text-white" />
             </motion.div>
             <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-white/40 opacity-0 group-hover:opacity-100 transition-opacity">
               Prev
@@ -217,14 +217,14 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
               animate={{ opacity: 1, scale: 1, rotateX: 0 }}
               exit={{ opacity: 0, scale: 0.8, rotateX: -15 }}
               transition={{ duration: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
-              className="relative"
+              className="relative w-full max-w-[1090px]"
             >
               <video
                 ref={videoRef}
                 src={videos[currentIndex]}
-                controls={showControls}
+                controls={false}
                 autoPlay
-                className="relative w-full max-w-5xl max-h-[75vh] rounded-2xl object-contain bg-black shadow-2xl border border-white/10"
+                className="relative w-full max-h-[60vh] sm:max-h-[75vh] max-[360px]:max-h-[55vh] max-[300px]:max-h-[50vh] rounded-xl object-contain bg-black shadow-2xl"
                 onEnded={() => {
                   if (videos.length > 1) {
                     handleNext();
@@ -233,38 +233,24 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
               />
-
-              {/* Playing indicator */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: isPlaying ? 1 : 0 }}
-                className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-[#7c3aed]/80 backdrop-blur-sm flex items-center gap-2"
-              >
-                <motion.div
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ duration: 0.5, repeat: Infinity }}
-                  className="w-2 h-2 rounded-full bg-green-400"
-                />
-                <span className="text-white text-sm font-medium">Playing</span>
-              </motion.div>
             </motion.div>
           </AnimatePresence>
 
-          {/* Next arrow */}
+          {/* Desktop next arrow — hidden on mobile */}
           <motion.button
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: showControls ? 1 : 0.2, x: 0 }}
             whileHover={{ scale: 1.15 }}
             whileTap={{ scale: 0.9 }}
             onClick={handleNext}
-            className="absolute right-4 z-10 p-4 rounded-full bg-[#7c3aed]/30 backdrop-blur-md border border-[#a78bfa]/40 hover:bg-[#7c3aed]/50 transition-all group"
+            className="hidden absolute right-4 z-10 p-4 rounded-full bg-[#7c3aed]/30 backdrop-blur-md border border-[#a78bfa]/40 hover:bg-[#7c3aed]/50 transition-all group"
             aria-label="Next"
           >
             <motion.div
               whileHover={{ x: 3 }}
               transition={{ type: 'spring', stiffness: 300 }}
             >
-              <ChevronRight className="w-10 h-10 text-white" />
+              <SkipForward className="w-10 h-10 text-white" />
             </motion.div>
             <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-white/40 opacity-0 group-hover:opacity-100 transition-opacity">
               Next
@@ -273,14 +259,50 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
         </div>
       )}
 
-      {/* Counter + dots */}
+      {/* Mobile bottom control bar — visible only below md */}
       {!loading && videos.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute bottom-6 flex flex-col items-center gap-4"
+          className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-center gap-6 py-4 px-6"
         >
-          {/* Video dots */}
+          <button
+            onClick={handlePrev}
+            className="p-3 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-all"
+            aria-label="Previous"
+          >
+            <SkipBack className="w-5 h-5 text-white" />
+          </button>
+
+          <button
+            onClick={togglePlay}
+            className="p-4 rounded-full bg-[#7c3aed]/60 border border-[#a78bfa]/50 hover:bg-[#7c3aed]/80 transition-all"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? (
+              <Pause className="w-6 h-6 text-white" />
+            ) : (
+              <Play className="w-6 h-6 text-white ml-0.5" />
+            )}
+          </button>
+
+          <button
+            onClick={handleNext}
+            className="p-3 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-all"
+            aria-label="Next"
+          >
+            <SkipForward className="w-5 h-5 text-white" />
+          </button>
+        </motion.div>
+      )}
+
+      {/* Desktop counter + dots — hidden on mobile */}
+      {!loading && videos.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="hidden absolute bottom-6 flex-col items-center gap-4"
+        >
           <div className="flex gap-2">
             {videos.map((_, i) => (
               <motion.button
@@ -305,8 +327,6 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
               </motion.button>
             ))}
           </div>
-
-          {/* Counter */}
           <div className="flex items-center gap-2 text-white/50 text-sm">
             <span className="font-mono bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
               {currentIndex + 1}
@@ -319,11 +339,11 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
         </motion.div>
       )}
 
-      {/* Keyboard hints */}
+      {/* Keyboard hints — desktop only */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: showControls && videos.length > 0 ? 0.6 : 0 }}
-        className="absolute bottom-6 right-6 flex gap-3 text-white/40 text-xs"
+        className="hidden md:flex absolute bottom-6 right-6 gap-3 text-white/40 text-xs"
       >
         <span className="px-2 py-1 rounded bg-white/5 border border-white/10">
           ← →
