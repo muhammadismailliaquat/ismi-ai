@@ -187,7 +187,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
 
       {/* Slider — desktop arrows + mobile control bar */}
       {!loading && videos.length > 0 && (
-        <div className="relative w-full h-full flex items-center justify-center px-0 pt-24 pb-20 md:pt-28 md:pb-24">
+        <div className="relative w-full h-full flex items-center justify-center px-0 pt-24 pb-24 md:pt-28 md:pb-28">
           {/* Desktop prev arrow — hidden on mobile */}
           <motion.button
             initial={{ opacity: 0, x: -20 }}
@@ -217,7 +217,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
               animate={{ opacity: 1, scale: 1, rotateX: 0 }}
               exit={{ opacity: 0, scale: 0.8, rotateX: -15 }}
               transition={{ duration: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
-              className="relative w-full max-w-[1000px]"
+              className="relative w-full max-w-[950px]"
             >
               <video
                 ref={videoRef}
