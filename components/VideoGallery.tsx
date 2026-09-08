@@ -217,7 +217,7 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
               animate={{ opacity: 1, scale: 1, rotateX: 0 }}
               exit={{ opacity: 0, scale: 0.8, rotateX: -15 }}
               transition={{ duration: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
-              className="relative w-full max-w-[1090px]"
+              className="relative w-full max-w-[1000px]"
             >
               <video
                 ref={videoRef}
