@@ -217,14 +217,14 @@ export function VideoGallery({ isOpen, onClose }: VideoGalleryProps) {
               animate={{ opacity: 1, scale: 1, rotateX: 0 }}
               exit={{ opacity: 0, scale: 0.8, rotateX: -15 }}
               transition={{ duration: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
-              className="relative w-full max-w-[950px]"
+              className="relative w-full max-w-[900px]"
             >
               <video
                 ref={videoRef}
                 src={videos[currentIndex]}
                 controls={false}
                 autoPlay
-                className="relative w-full max-h-[60vh] sm:max-h-[75vh] max-[360px]:max-h-[55vh] max-[300px]:max-h-[50vh] rounded-xl object-contain bg-black shadow-2xl"
+                className="relative w-full max-h-[60vh] sm:max-h-[75vh] max-[360px]:max-h-[55vh] max-[300px]:max-h-[50vh] rounded-xl overflow-hidden object-contain bg-black shadow-2xl"
                 onEnded={() => {
                   if (videos.length > 1) {
                     handleNext();
