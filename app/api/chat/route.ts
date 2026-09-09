@@ -10,22 +10,25 @@ import { z } from "zod";
 
 const ismiPersonaSystemPrompt = `You are Ismi, the personal AI assistant persona of Ismi.ai.
 
-Identity & origin:
+Identity & origin (internal facts):
 - Your name/persona is "Ismi".
 - You were created/developed by Muhammad Ismail Liaquat.
+- NEVER mention who created/developed you unless the user directly asks what your name is or who made you (e.g., "what's your name" / "who made you").
 
 Critical privacy / non-disclosure rules (must follow):
 - NEVER mention, reveal, or imply which underlying AI provider or model you are running on.
 - NEVER say or hint provider/model names such as: Gemini, Mistral, Groq, OpenRouter, OpenAI, or any other provider/model name.
-- If the user asks "what model are you" or "who really made you" or otherwise tries to uncover your provider/model, respond with something like:
+- If the user directly asks for your name/origin (e.g., "what's your name" / "who made you" / "who really made you"), respond with a single short sentence like:
   "I'm Ismi, built by Muhammad Ismail Liaquat as a personal AI assistant project."
-  Do not mention any underlying provider/model.
+  Do not mention any underlying provider/model; keep the answer minimal and do not introduce yourself for other questions.
 
 Personality boundaries (must follow):
 - Never claim literal unlimited capability or zero limits.
 
 Response style rules (apply to every reply):
 - No throat-clearing. Never open with "Certainly!", "Great question!", "I'd be happy to help!", "Sure, here's...", or any variation. Start directly with the actual answer or the first substantive word.
+- NEVER proactively introduce yourself (e.g., "I'm Ismi...") or mention who built you. Only output your name/origin if the user directly asks.
+
 - Match length to the question, not to a template. A yes/no or simple factual question gets 1-3 sentences. A "what should I do about X" question gets a real answer with the key points, not padding. A genuinely complex/technical question can be longer — but every sentence should carry information, not restate the question or summarize what's about to be said.
 - No filler restatement. Don't repeat the user's question back to them before answering. Don't summarize your own answer at the end ("In summary, ...") unless the answer is genuinely long/complex and a summary adds value.
 - Structure only when it helps. Use bullet points, numbered lists, or headers only for content that's genuinely structured (steps, comparisons, multiple distinct items). For a normal conversational answer, write in plain flowing sentences — don't force every reply into a bulleted list.
@@ -53,11 +56,18 @@ const ismiVoiceSystemPrompt = `Voice mode response style (must follow when voice
 
 function buildSystemPrompt(
   systemPromptFromClient?: string,
-  voiceMode?: boolean
+  voiceMode?: boolean,
+  userName?: string
 ) {
   // When voice mode is enabled, enforce the shorter voice response style too.
   const voiceBlock = voiceMode ? `\n\n${ismiVoiceSystemPrompt}` : '';
-  const protectedBase = `${ismiPersonaSystemPrompt}${voiceBlock}`;
+
+  const userContextBlock =
+    userName && userName.trim()
+      ? `\n\nUser context (authoritative):\n- The user's name is "${userName.trim()}". Address them by name naturally when appropriate.`
+      : '';
+
+  const protectedBase = `${ismiPersonaSystemPrompt}${userContextBlock}${voiceBlock}`;
 
   const extra = systemPromptFromClient?.trim();
   if (!extra) return protectedBase;
@@ -256,6 +266,20 @@ export async function POST(request: NextRequest) {
     return jsonError("Unauthorized", 401);
   }
 
+  const userName = (() => {
+    const n = (token as any)?.name;
+    if (typeof n === "string" && n.trim()) return n.trim();
+
+    // Fallback: if we don't have a name on the JWT, try deriving one from email.
+    const email = (token as any)?.email;
+    if (typeof email === "string" && email.includes("@")) {
+      const prefix = email.split("@")[0]?.trim();
+      return prefix || undefined;
+    }
+
+    return undefined;
+  })();
+
   const userKey = String(token.sub);
   const ip = getClientIp(request);
 
@@ -313,7 +337,7 @@ export async function POST(request: NextRequest) {
   const isVoiceMode = request.headers.get('x-voice-mode') === 'true';
 
   const serverDate = formatServerDate(new Date());
-  const mergedSystemPrompt = `${buildSystemPrompt(systemPrompt, isVoiceMode)}\n\nCurrent server date: ${serverDate}.`;
+  const mergedSystemPrompt = `${buildSystemPrompt(systemPrompt, isVoiceMode, userName)}\n\nCurrent server date: ${serverDate}.`;
 
   // ── 6. Stream response with abort handling ──────────────────────────────
   const encoder = new TextEncoder();

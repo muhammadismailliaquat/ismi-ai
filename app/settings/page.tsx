@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Volume2 } from 'lucide-react';
 import { EDGE_VOICES, DEFAULT_TTS_VOICE } from '@/lib/ttsVoices';
 import { ParticleBackground } from '@/components/ParticleBackground';
+import { signOut } from 'next-auth/react';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
@@ -123,6 +124,22 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+            </motion.div>
+
+            {/* Logout */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="rounded-2xl p-6 border border-red-400/30 bg-red-500/10 backdrop-blur-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+            >
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: '/login' })}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/15 border border-red-400/30 text-red-200 font-semibold hover:bg-red-500/25 transition-colors"
+              >
+                Log out
+              </button>
             </motion.div>
 
             {/* About */}
